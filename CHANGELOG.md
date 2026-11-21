@@ -2,6 +2,9 @@
 
 ## 0.3.0 – 2026-11-21
 
+- **Neues Logo**: ein Schwarzes Loch mit Akkretionsscheibe, gelinstem Lichtkranz und Photonenring
+  (eigene Vektorgrafik, erzeugt mit `packaging/tools/make_logo.py`); gilt für App-Icon, Startbildschirm,
+  Willkommensdialog und Info-Seite.
 - Neues **Rechenprotokoll**: Während der Analyse fährt rechts ein Panel herein, das live zeigt, wie die
   Berechnung abläuft – Datei öffnen, Objekterkennung, Messwerte jedes Frames, Frame-Qualität,
   Stacking-Empfehlung und die Score-Formel mit eingesetzten Werten. Mit Syntax-Hervorhebung,
