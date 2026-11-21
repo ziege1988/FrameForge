@@ -105,3 +105,16 @@ def test_trace_panel_shows_live_computation(app, tmp_path, settings, window_fact
     assert w.trace_panel.width() > 300
     w.toggle_trace()
     assert not w.trace_panel.is_open()
+
+
+def test_starfield_background_and_toggle(app, settings, window_factory):
+    from frameforge.gui.starfield import render_starfield
+
+    pm = render_starfield(400, 300)
+    img = pm.toImage()
+    bright = sum(1 for x in range(0, 400, 2) for y in range(0, 300, 2) if img.pixelColor(x, y).lightness() > 150)
+    assert bright > 5  # stars are drawn
+    w = window_factory(settings)
+    assert w.sky._enabled
+    w.settings_page.starfield.setChecked(False)
+    assert settings.get("ui/starfield") is False and not w.sky._enabled

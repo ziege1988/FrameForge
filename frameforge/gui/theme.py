@@ -17,21 +17,22 @@ INPUT = "#0c1324"
 
 STYLESHEET = f"""
 QWidget {{ font-size: 13px; color: {TEXT}; }}
-QMainWindow, QDialog, QStackedWidget, QScrollArea, QScrollArea > QWidget > QWidget {{ background: {BG}; }}
-QMenuBar {{ background: {BG}; color: {TEXT}; padding: 2px 6px; }}
+QMainWindow, QDialog {{ background: {BG}; }}
+QStackedWidget, QScrollArea, QScrollArea > QWidget > QWidget, QSplitter, QTabWidget > QStackedWidget {{ background: transparent; }}
+QMenuBar {{ background: rgba(8, 12, 26, 235); color: {TEXT}; padding: 2px 6px; }}
 QMenuBar::item {{ padding: 5px 10px; border-radius: 5px; background: transparent; }}
 QMenuBar::item:selected {{ background: #1a2540; }}
 QMenu {{ background: {CARD}; border: 1px solid {CARD_BORDER}; padding: 4px; }}
 QMenu::item {{ padding: 6px 24px 6px 14px; border-radius: 4px; }}
 QMenu::item:selected {{ background: #1c2b4d; }}
 QMenu::separator {{ height: 1px; background: {CARD_BORDER}; margin: 4px 8px; }}
-QFrame#sidebar {{ background: {SIDEBAR}; border-right: 1px solid {CARD_BORDER}; }}
+QFrame#sidebar {{ background: rgba(13, 20, 40, 215); border-right: 1px solid {CARD_BORDER}; }}
 QToolButton#nav {{ text-align: left; padding: 9px 12px; border-radius: 7px; color: #c9d2e6; background: transparent; border: none; }}
 QToolButton#nav:hover {{ background: #16213b; }}
 QToolButton#nav:checked {{ background: {ACCENT}; color: #ffffff; font-weight: 600; }}
-QFrame#card {{ background: {CARD}; border: 1px solid {CARD_BORDER}; border-radius: 10px; }}
+QFrame#card {{ background: rgba(17, 26, 46, 222); border: 1px solid rgba(62, 84, 130, 110); border-radius: 10px; }}
 QFrame#card QLabel {{ background: transparent; }}
-QFrame#option {{ background: #101a33; border: 1px solid #24345a; border-radius: 8px; }}
+QFrame#option {{ background: rgba(16, 26, 51, 225); border: 1px solid #24345a; border-radius: 8px; }}
 QFrame#option:hover {{ border-color: {ACCENT}; background: #132143; }}
 QFrame#optionPrimary {{ background: #12306a; border: 1px solid {ACCENT}; border-radius: 8px; }}
 QFrame#optionPrimary:hover {{ background: #173a80; }}
@@ -71,7 +72,7 @@ QLabel#h2 {{ font-size: 15px; font-weight: 600; color: #ffffff; }}
 QLabel#big {{ font-size: 34px; font-weight: 700; color: #ffffff; }}
 QLabel#badge {{ border-radius: 4px; padding: 2px 8px; font-weight: 600; }}
 QSplitter::handle {{ background: {BG}; }}
-QStatusBar {{ background: {SIDEBAR}; color: {MUTED}; border-top: 1px solid {CARD_BORDER}; }}
+QStatusBar {{ background: rgba(13, 20, 40, 235); color: {MUTED}; border-top: 1px solid {CARD_BORDER}; }}
 QScrollBar:vertical {{ background: transparent; width: 10px; }}
 QScrollBar::handle:vertical {{ background: #26324f; border-radius: 4px; min-height: 30px; }}
 QScrollBar:horizontal {{ background: transparent; height: 10px; }}

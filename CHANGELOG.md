@@ -7,6 +7,8 @@
   Stacking-Empfehlung und die Score-Formel mit eingesetzten Werten. Mit Syntax-Hervorhebung,
   automatischem Mitlaufen, Kopieren und Leeren; ein-/ausblendbar über *Analyse › Rechenprotokoll* (Strg+L)
   oder automatisch bei jeder Analyse (Einstellungen › Allgemein).
+- **Sternenhimmel-Hintergrund** mit Milchstraßenband und dezenten Nebeln (auch im Startbildschirm und
+  Willkommensdialog); Karten leicht durchscheinend. Abschaltbar unter *Einstellungen › Allgemein*.
 
 ## 0.2.0 – 2026-11-21
 

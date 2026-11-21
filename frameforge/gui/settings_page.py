@@ -119,6 +119,10 @@ class SettingsPage(QWidget):
         self.trace_auto.setChecked(self.settings.get("ui/trace_auto_open"))
         self.trace_auto.toggled.connect(lambda v: self._store("ui/trace_auto_open", v))
         card.body.addWidget(self.trace_auto)
+        self.starfield = QCheckBox("Sternenhimmel als Hintergrund")
+        self.starfield.setChecked(self.settings.get("ui/starfield"))
+        self.starfield.toggled.connect(lambda v: self._store("ui/starfield", v))
+        card.body.addWidget(self.starfield)
         note = QLabel("Alle Analysen laufen lokal auf diesem Computer. Es werden keine Bilddaten hochgeladen; "
                       "eine Internetverbindung wird nur für die Update-Prüfung verwendet.")
         note.setWordWrap(True)

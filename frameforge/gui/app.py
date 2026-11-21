@@ -29,6 +29,17 @@ def _splash_pixmap(ratio: float) -> QPixmap:
     p.setBrush(grad)
     p.setPen(QColor("#1e2a46"))
     p.drawRoundedRect(QRectF(0.5, 0.5, w - 1, h - 1), 18, 18)
+    from PySide6.QtGui import QPainterPath
+
+    from .starfield import render_starfield
+
+    clip = QPainterPath()
+    clip.addRoundedRect(QRectF(1, 1, w - 2, h - 2), 17, 17)
+    p.setClipPath(clip)
+    p.setOpacity(0.9)
+    p.drawPixmap(QRectF(0, 0, w, h), render_starfield(w, h, ratio, density=1.8), QRectF(0, 0, w * ratio, h * ratio))
+    p.setOpacity(1.0)
+    p.setClipping(False)
     p.drawPixmap(QRectF(28, 62, 230, 230), logo_pixmap(230, ratio), QRectF(0, 0, 230 * ratio, 230 * ratio))
 
     title = QFont()

@@ -103,6 +103,18 @@ class WelcomeDialog(QDialog):
         col.addLayout(bottom)
         root.addLayout(col, 1)
 
+    def paintEvent(self, event):
+        if self.settings.get("ui/starfield"):
+            from PySide6.QtGui import QPainter
+
+            from .starfield import render_starfield
+
+            if getattr(self, "_sky", None) is None or self._sky.deviceIndependentSize().toSize() != self.size():
+                self._sky = render_starfield(self.width(), self.height(), self.devicePixelRatioF(), density=1.6)
+            QPainter(self).drawPixmap(0, 0, self._sky)
+        else:
+            super().paintEvent(event)
+
     def selected_profile(self) -> str:
         b = self.profile_group.checkedButton()
         return b.property("profile") if b else self.settings.get("analysis/profile")

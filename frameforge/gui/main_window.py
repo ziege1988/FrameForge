@@ -52,6 +52,7 @@ from .pages import InfoPage, ReportsPage
 from .resources import app_icon
 from .settings import Settings
 from .settings_page import SettingsPage
+from .starfield import StarfieldWidget
 from .trace_panel import TracePanel
 from .theme import BAD, GOOD, MUTED, de_number, score_color, verdict_color
 from .welcome import PROFILE_ORDER, WelcomeDialog
@@ -170,7 +171,8 @@ class MainWindow(QMainWindow):
         h.addAction(icons.icon("info"), f"Über {APP_NAME}", lambda: self.goto(PAGE_INFO))
 
     def _build_ui(self):
-        root = QWidget()
+        root = StarfieldWidget(enabled=self.settings.get("ui/starfield"))
+        self.sky = root
         rl = QHBoxLayout(root)
         rl.setContentsMargins(0, 0, 0, 0)
         rl.setSpacing(0)
@@ -473,6 +475,7 @@ class MainWindow(QMainWindow):
             self.settings_page.sync_from_settings()
 
     def _on_settings_changed(self):
+        self.sky.set_enabled_sky(self.settings.get("ui/starfield"))
         self._set_profile(self.settings.get("analysis/profile"))
         self._set_mode(self.settings.get("analysis/mode"))
 
