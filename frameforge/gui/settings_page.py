@@ -6,10 +6,13 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
+    QButtonGroup,
     QCheckBox,
+    QFileDialog,
     QComboBox,
     QFormLayout,
     QGridLayout,
@@ -19,8 +22,10 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QSlider,
     QSpinBox,
     QTextBrowser,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -28,7 +33,12 @@ from PySide6.QtWidgets import (
 from .. import APP_NAME, UPDATE_REPOSITORY, __version__, updater
 from ..core.analyzer import MODE_LABELS
 from ..core.profiles import PROFILES
+from .appearance import BACKGROUNDS, CUSTOM, image_path_for, palette_for
 from .components import Card
+from .starfield import render_image_background, render_starfield
+
+TILE_W, TILE_H = 150, 86
+TILES_PER_ROW = 4
 from .settings import Settings
 from .workers import DownloadWorker, UpdateCheckWorker
 
@@ -36,6 +46,7 @@ from .workers import DownloadWorker, UpdateCheckWorker
 class SettingsPage(QWidget):
     updateAvailable = Signal(object)
     settingsChanged = Signal()
+    appearanceChanged = Signal()
 
     def __init__(self, settings: Settings, parent=None):
         super().__init__(parent)
@@ -58,6 +69,7 @@ class SettingsPage(QWidget):
         title = QLabel("Einstellungen")
         title.setObjectName("h1")
         lay.addWidget(title)
+        lay.addWidget(self._appearance_card())
         grid = QGridLayout()
         grid.setSpacing(16)
         left = QVBoxLayout()
@@ -109,6 +121,118 @@ class SettingsPage(QWidget):
         card.body.addWidget(hint)
         return card
 
+    def _appearance_card(self) -> Card:
+        card = Card("Erscheinungsbild", "general")
+        hint = QLabel("Hintergrund wählen – Knöpfe, Navigation, Menüs und Akzente übernehmen automatisch "
+                      "die Farbe des Nebels.")
+        hint.setObjectName("muted")
+        hint.setWordWrap(True)
+        card.body.addWidget(hint)
+        grid = QGridLayout()
+        grid.setSpacing(10)
+        self.bg_group = QButtonGroup(self)
+        self.bg_group.setExclusive(True)
+        tiles = [self._bg_tile(bg.key, bg.name, bg.description) for bg in BACKGROUNDS]
+        self.custom_tile = self._bg_tile(CUSTOM, "Eigenes Bild …", "Eigenes Astrofoto als Hintergrund wählen")
+        tiles.append(self.custom_tile)
+        for i, t in enumerate(tiles):
+            grid.addWidget(t, i // TILES_PER_ROW, i % TILES_PER_ROW)
+        grid.setColumnStretch(TILES_PER_ROW, 1)
+        self.bg_group.idClicked.connect(self._on_tile)
+        self.sync_background_tiles()
+        card.body.addLayout(grid)
+        dim_row = QHBoxLayout()
+        dim_row.addWidget(QLabel("Hintergrund abdunkeln:"))
+        self.dim = QSlider(Qt.Horizontal)
+        self.dim.setRange(0, 85)
+        self.dim.setValue(int(self.settings.get("ui/background_dim")))
+        self.dim.setMaximumWidth(320)
+        self.dim_label = QLabel(f"{self.dim.value()} %")
+        self.dim.valueChanged.connect(self._on_dim)
+        dim_row.addWidget(self.dim)
+        dim_row.addWidget(self.dim_label)
+        dim_row.addStretch(1)
+        card.body.addLayout(dim_row)
+        return card
+
+    def _bg_tile(self, key: str, name: str, tip: str) -> QToolButton:
+        b = QToolButton()
+        b.setObjectName("bgTile")
+        b.setCheckable(True)
+        b.setText(name)
+        b.setToolTip(tip)
+        b.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        b.setIconSize(QSize(TILE_W, TILE_H))
+        b.setIcon(QIcon(self._thumbnail(key)))
+        b.setProperty("bgKey", key)
+        self.bg_group.addButton(b, len(self.bg_group.buttons()))
+        return b
+
+    def _thumbnail(self, key: str) -> QPixmap:
+        """Small preview with a stripe in the derived accent colour."""
+        ratio = self.devicePixelRatioF()
+        custom = self.settings.get("ui/background_custom") or ""
+        path = image_path_for(key, custom)
+        pal = palette_for(key, custom)
+        if path is not None:
+            img = QImage(str(path))
+            pm = render_image_background(img, TILE_W, TILE_H, ratio, 15, pal.bg) if not img.isNull() \
+                else render_starfield(TILE_W, TILE_H, ratio)
+        elif key == "none":
+            pm = QPixmap(int(TILE_W * ratio), int(TILE_H * ratio))
+            pm.setDevicePixelRatio(ratio)
+            pm.fill(QColor(pal.bg))
+        elif key == CUSTOM:
+            pm = QPixmap(int(TILE_W * ratio), int(TILE_H * ratio))
+            pm.setDevicePixelRatio(ratio)
+            pm.fill(QColor("#151b2b"))
+            p = QPainter(pm)
+            p.setPen(QColor("#8a94ad"))
+            f = p.font()
+            f.setPixelSize(34)
+            p.setFont(f)
+            p.drawText(QRectF(0, 0, TILE_W, TILE_H), Qt.AlignCenter, "+")
+            p.end()
+        else:
+            pm = render_starfield(TILE_W, TILE_H, ratio, density=2.0)
+        p = QPainter(pm)
+        p.fillRect(QRectF(0, TILE_H - 7, TILE_W, 7), QColor(pal.accent))
+        p.end()
+        return pm
+
+    def _on_tile(self, idx: int):
+        key = self.bg_group.button(idx).property("bgKey")
+        if key == CUSTOM:
+            start = self.settings.get("ui/background_custom") or self.settings.get("ui/last_dir") or ""
+            path, _ = QFileDialog.getOpenFileName(self, "Hintergrundbild wählen", start,
+                                                  "Bilder (*.jpg *.jpeg *.png *.tif *.tiff *.webp *.bmp)")
+            if not path:
+                # keep the previous choice
+                prev = self.settings.get("ui/background")
+                for b in self.bg_group.buttons():
+                    b.setChecked(b.property("bgKey") == prev)
+                return
+            self.settings.set("ui/background_custom", path)
+            self.custom_tile.setIcon(QIcon(self._thumbnail(CUSTOM)))
+        self.settings.set("ui/background", key)
+        self.settings.sync()
+        self.appearanceChanged.emit()
+
+    def sync_background_tiles(self):
+        current = self.settings.get("ui/background")
+        for b in self.bg_group.buttons():
+            b.setChecked(b.property("bgKey") == current)
+        self.dim.blockSignals(True) if hasattr(self, "dim") else None
+        if hasattr(self, "dim"):
+            self.dim.setValue(int(self.settings.get("ui/background_dim")))
+            self.dim.blockSignals(False)
+            self.dim_label.setText(f"{self.dim.value()} %")
+
+    def _on_dim(self, value: int):
+        self.dim_label.setText(f"{value} %")
+        self.settings.set("ui/background_dim", value)
+        self.appearanceChanged.emit()
+
     def _general_card(self) -> Card:
         card = Card("Allgemein", "settings")
         self.show_welcome = QCheckBox("Willkommensdialog beim Start anzeigen")
@@ -119,10 +243,6 @@ class SettingsPage(QWidget):
         self.trace_auto.setChecked(self.settings.get("ui/trace_auto_open"))
         self.trace_auto.toggled.connect(lambda v: self._store("ui/trace_auto_open", v))
         card.body.addWidget(self.trace_auto)
-        self.starfield = QCheckBox("Sternenhimmel als Hintergrund")
-        self.starfield.setChecked(self.settings.get("ui/starfield"))
-        self.starfield.toggled.connect(lambda v: self._store("ui/starfield", v))
-        card.body.addWidget(self.starfield)
         note = QLabel("Alle Analysen laufen lokal auf diesem Computer. Es werden keine Bilddaten hochgeladen; "
                       "eine Internetverbindung wird nur für die Update-Prüfung verwendet.")
         note.setWordWrap(True)

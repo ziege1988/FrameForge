@@ -7,8 +7,12 @@
   Stacking-Empfehlung und die Score-Formel mit eingesetzten Werten. Mit Syntax-Hervorhebung,
   automatischem Mitlaufen, Kopieren und Leeren; ein-/ausblendbar über *Analyse › Rechenprotokoll* (Strg+L)
   oder automatisch bei jeder Analyse (Einstellungen › Allgemein).
-- **Sternenhimmel-Hintergrund** mit Milchstraßenband und dezenten Nebeln (auch im Startbildschirm und
-  Willkommensdialog); Karten leicht durchscheinend. Abschaltbar unter *Einstellungen › Allgemein*.
+- **Wählbare Hintergründe** (*Einstellungen › Erscheinungsbild*): erzeugter Sternenhimmel, fünf Astrofotos
+  (Orion-Region, Nordamerikanebel NGC 7000, Plejaden M45, Plejaden Weitfeld, Polaris-Region), schlicht
+  oder ein **eigenes Bild**. Regler zum Abdunkeln für gute Lesbarkeit.
+- **Farben passend zum Nebel**: Knöpfe, Navigation, Menüs, Tabs, Logo-Schriftzug und Akzente übernehmen
+  automatisch den dominanten Farbton des Hintergrunds (auch bei eigenen Bildern). Startbildschirm und
+  Willkommensdialog zeigen den gewählten Hintergrund.
 
 ## 0.2.0 – 2026-11-21
 

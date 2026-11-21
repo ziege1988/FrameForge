@@ -20,7 +20,9 @@ from . import icons
 from .components import OptionButton
 from .resources import app_icon, logo_pixmap
 from .settings import Settings
-from .theme import ACCENT
+from PySide6.QtCore import QObject
+
+from . import theme
 
 PROFILE_ORDER = ["sun", "moon", "planet", "deepsky", "general"]
 
@@ -37,7 +39,7 @@ def profile_chips(current: str, parent=None) -> tuple[QHBoxLayout, QButtonGroup]
         b.setObjectName("chip")
         b.setCheckable(True)
         b.setText(prof.name)
-        b.setIcon(icons.icon(icons.PROFILE_ICONS[key], "#c9d2e6", ACCENT, size=26))
+        b.setIcon(icons.icon(icons.PROFILE_ICONS[key], "#c9d2e6", theme.accent(), size=26))
         b.setIconSize(b.iconSize() * 1.4)
         b.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
         b.setToolTip(prof.description)
@@ -47,7 +49,20 @@ def profile_chips(current: str, parent=None) -> tuple[QHBoxLayout, QButtonGroup]
         group.addButton(b)
         row.addWidget(b)
     row.addStretch(1)
+    group._refresher = _ChipRefresher(group)  # recolours the icons when the theme changes
     return row, group
+
+
+class _ChipRefresher(QObject):
+    def __init__(self, group: QButtonGroup):
+        super().__init__(group)
+        self.group = group
+        theme.bus.changed.connect(self.refresh)
+
+    def refresh(self, p):
+        for b in self.group.buttons():
+            key = b.property("profile")
+            b.setIcon(icons.icon(icons.PROFILE_ICONS[key], "#c9d2e6", p.accent, size=26))
 
 
 class WelcomeDialog(QDialog):
@@ -104,16 +119,23 @@ class WelcomeDialog(QDialog):
         root.addLayout(col, 1)
 
     def paintEvent(self, event):
-        if self.settings.get("ui/starfield"):
-            from PySide6.QtGui import QPainter
+        from PySide6.QtGui import QImage, QPainter
 
-            from .starfield import render_starfield
+        from .appearance import resolve
+        from .starfield import render_image_background, render_starfield
 
-            if getattr(self, "_sky", None) is None or self._sky.deviceIndependentSize().toSize() != self.size():
-                self._sky = render_starfield(self.width(), self.height(), self.devicePixelRatioF(), density=1.6)
-            QPainter(self).drawPixmap(0, 0, self._sky)
-        else:
-            super().paintEvent(event)
+        if getattr(self, "_sky", None) is None or self._sky.deviceIndependentSize().toSize() != self.size():
+            mode, path, dim, pal = resolve(self.settings)
+            ratio = self.devicePixelRatioF()
+            img = QImage(str(path)) if mode == "image" else QImage()
+            if not img.isNull():
+                self._sky = render_image_background(img, self.width(), self.height(), ratio, max(dim, 50), pal.bg)
+            elif mode == "sky":
+                self._sky = render_starfield(self.width(), self.height(), ratio, density=1.6)
+            else:
+                super().paintEvent(event)
+                return
+        QPainter(self).drawPixmap(0, 0, self._sky)
 
     def selected_profile(self) -> str:
         b = self.profile_group.checkedButton()

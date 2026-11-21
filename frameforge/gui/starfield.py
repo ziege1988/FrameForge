@@ -7,10 +7,12 @@ analysis. A fixed seed keeps the sky identical between starts and resizes
 
 from __future__ import annotations
 
+import os
 import random
+from functools import lru_cache
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPen, QPixmap, QRadialGradient
+from PySide6.QtGui import QColor, QImage, QLinearGradient, QPainter, QPen, QPixmap, QRadialGradient
 from PySide6.QtWidgets import QWidget
 
 from .theme import BG
@@ -117,17 +119,71 @@ def render_starfield(width: int, height: int, ratio: float = 1.0, density: float
     return pm
 
 
+def render_image_background(image: QImage, width: int, height: int, ratio: float, dim: int, tint: str) -> QPixmap:
+    """Photo scaled to cover the area (centre crop), darkened for readable text."""
+    w, h = max(1, width), max(1, height)
+    pm = QPixmap(int(w * ratio), int(h * ratio))
+    pm.setDevicePixelRatio(ratio)
+    pm.fill(QColor(tint))
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.SmoothPixmapTransform)
+    iw, ih = image.width(), image.height()
+    if iw and ih:
+        scale = max(w / iw, h / ih)
+        sw, sh = w / scale, h / scale
+        src = QRectF((iw - sw) / 2, (ih - sh) / 2, sw, sh)
+        p.drawImage(QRectF(0, 0, w, h), image, src)
+    overlay = QColor(tint)
+    overlay.setAlpha(int(255 * max(0, min(dim, 95)) / 100))
+    p.fillRect(QRectF(0, 0, w, h), overlay)
+    # Vignette: slightly darker edges keep the focus on the content
+    vg = QRadialGradient(QPointF(w / 2, h / 2), max(w, h) * 0.75)
+    edge = QColor(tint)
+    edge.setAlpha(0)
+    vg.setColorAt(0.55, edge)
+    edge.setAlpha(110)
+    vg.setColorAt(1.0, edge)
+    p.fillRect(QRectF(0, 0, w, h), vg)
+    p.end()
+    return pm
+
+
+@lru_cache(maxsize=4)
+def _load_image(path: str, mtime: float) -> QImage:
+    img = QImage(path)
+    if img.isNull():
+        return img
+    # Large images are reduced once; the background never needs more than ~2.5k px
+    if img.width() > 2600:
+        img = img.scaledToWidth(2600, Qt.SmoothTransformation)
+    return img
+
+
 class StarfieldWidget(QWidget):
-    """Container widget that paints the night sky behind its children."""
+    """Container widget that paints the chosen background behind its children.
+
+    Modes: ``"sky"`` (procedural star field), ``"image"`` (photo) or ``"none"``.
+    """
 
     def __init__(self, parent=None, enabled: bool = True):
         super().__init__(parent)
         self._cache: QPixmap | None = None
-        self._enabled = enabled
+        self._mode = "sky" if enabled else "none"
+        self._path: str | None = None
+        self._dim = 45
+        self._tint = BG
         self.setAttribute(Qt.WA_StyledBackground, False)
 
+    @property
+    def _enabled(self) -> bool:  # kept for compatibility
+        return self._mode != "none"
+
     def set_enabled_sky(self, on: bool):
-        self._enabled = on
+        self.set_background("sky" if on else "none")
+
+    def set_background(self, mode: str, path=None, dim: int = 45, tint: str | None = None):
+        self._mode, self._path, self._dim = mode, (str(path) if path else None), dim
+        self._tint = tint or BG
         self._cache = None
         self.update()
 
@@ -135,11 +191,19 @@ class StarfieldWidget(QWidget):
         self._cache = None
         super().resizeEvent(event)
 
+    def _render(self) -> QPixmap:
+        ratio = self.devicePixelRatioF()
+        if self._mode == "image" and self._path and os.path.isfile(self._path):
+            img = _load_image(self._path, os.path.getmtime(self._path))
+            if not img.isNull():
+                return render_image_background(img, self.width(), self.height(), ratio, self._dim, self._tint)
+        return render_starfield(self.width(), self.height(), ratio)
+
     def paintEvent(self, _event):
         p = QPainter(self)
-        if not self._enabled:
-            p.fillRect(self.rect(), QColor(BG))
+        if self._mode == "none":
+            p.fillRect(self.rect(), QColor(self._tint))
             return
         if self._cache is None or self._cache.deviceIndependentSize().toSize() != self.size():
-            self._cache = render_starfield(self.width(), self.height(), self.devicePixelRatioF())
+            self._cache = self._render()
         p.drawPixmap(0, 0, self._cache)

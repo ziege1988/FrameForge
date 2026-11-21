@@ -107,14 +107,40 @@ def test_trace_panel_shows_live_computation(app, tmp_path, settings, window_fact
     assert not w.trace_panel.is_open()
 
 
-def test_starfield_background_and_toggle(app, settings, window_factory):
+def test_backgrounds_and_matching_palettes(app, settings, window_factory):
+    from frameforge.gui import theme
+    from frameforge.gui.appearance import BACKGROUNDS, palette_for
     from frameforge.gui.starfield import render_starfield
 
-    pm = render_starfield(400, 300)
-    img = pm.toImage()
-    bright = sum(1 for x in range(0, 400, 2) for y in range(0, 300, 2) if img.pixelColor(x, y).lightness() > 150)
-    assert bright > 5  # stars are drawn
+    img = render_starfield(400, 300).toImage()
+    assert sum(1 for x in range(0, 400, 2) for y in range(0, 300, 2) if img.pixelColor(x, y).lightness() > 150) > 5
+    hues = {b.key: palette_for(b.key).hue for b in BACKGROUNDS if b.file}
+    assert 5 <= hues["ngc7000"] <= 45          # orange H-alpha
+    assert hues["orion"] >= 320 or hues["orion"] <= 10  # pink/red
+    assert 180 <= hues["plejaden_m45"] <= 235  # blue reflection nebula
     w = window_factory(settings)
-    assert w.sky._enabled
-    w.settings_page.starfield.setChecked(False)
-    assert settings.get("ui/starfield") is False and not w.sky._enabled
+    for key in ("ngc7000", "none", "sky"):
+        settings.set("ui/background", key)
+        w.apply_appearance()
+        assert theme.current().accent == palette_for(key).accent
+    assert w.sky._mode == "sky"
+    tiles = w.settings_page.bg_group.buttons()
+    assert len(tiles) == len(BACKGROUNDS) + 1  # + custom image
+
+
+def test_custom_background_image(app, settings, window_factory, tmp_path):
+    import numpy as np
+    from PIL import Image
+
+    from frameforge.gui import theme
+
+    rgb = np.zeros((120, 200, 3), np.uint8)
+    rgb[..., 1] = 180  # green nebula
+    rgb[::7, ::9] = 255
+    path = tmp_path / "grün.png"
+    Image.fromarray(rgb).save(path)
+    settings.set("ui/background", "custom")
+    settings.set("ui/background_custom", str(path))
+    w = window_factory(settings)
+    assert w.sky._mode == "image"
+    assert 90 <= theme.current().hue <= 150

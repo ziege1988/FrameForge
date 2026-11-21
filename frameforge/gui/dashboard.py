@@ -28,15 +28,29 @@ from ..core.scoring import VERDICT_CONDITIONAL, VERDICT_RECOMMENDED, VERDICT_REJ
 from . import icons
 from .components import Badge, Card, DonutChart, OptionButton, Sparkline, ZoomPreview, format_duration, status_icon
 from .resources import logo_pixmap
-from .theme import ACCENT, BAD, GOOD, MUTED, WARN, de_number, score_color
+from . import theme
+from .theme import BAD, GOOD, MUTED, WARN, de_number, score_color
 from .welcome import profile_chips
 
 
+class ThemedLabel(QLabel):
+    """Rich-text label whose template uses {accent}/{accent_light}; follows theme changes."""
+
+    def __init__(self, template: str, parent=None):
+        super().__init__(parent)
+        self.template = template
+        self.setTextFormat(Qt.RichText)
+        self._apply(theme.current())
+        theme.bus.changed.connect(self._apply)
+
+    def _apply(self, p):
+        self.setText(self.template.format(accent=p.accent, accent_light=p.accent_light))
+
+
 def wordmark(size: int = 30) -> QLabel:
-    lbl = QLabel(f"<span style='font-size:{size}px; font-weight:800; font-style:italic; color:#ffffff'>Frame</span>"
-                 f"<span style='font-size:{size}px; font-weight:800; font-style:italic; color:#4f95ff'>Forge</span>")
-    lbl.setTextFormat(Qt.RichText)
-    return lbl
+    return ThemedLabel(
+        f"<span style='font-size:{size}px; font-weight:800; font-style:italic; color:#ffffff'>Frame</span>"
+        f"<span style='font-size:{size}px; font-weight:800; font-style:italic; color:{{accent}}'>Forge</span>")
 
 
 def slogan_label() -> QLabel:
@@ -333,7 +347,7 @@ class OverviewPage(QWidget):
             self.spark.color = color
         else:
             self.score_trend.setText("")
-            self.spark.color = ACCENT
+            self.spark.color = theme.accent()
 
         while self.top_grid.count():
             item = self.top_grid.takeAt(0)

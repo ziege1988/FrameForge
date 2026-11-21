@@ -158,6 +158,12 @@ tests/             pytest-Suite mit synthetischen Testdaten
 
 **Wichtig für Updates:** Die App fragt die GitHub-API ohne Anmeldung ab. Das funktioniert nur, wenn das Repository (bzw. das in `UPDATE_REPOSITORY` eingetragene Release-Repository) **öffentlich** ist. Bei einem privaten Repository kann ein separates öffentliches Repository nur für Releases verwendet werden.
 
+### Erscheinungsbild
+
+Unter *Einstellungen › Erscheinungsbild* lässt sich der Hintergrund wählen: ein erzeugter Sternenhimmel, mitgelieferte Astrofotos oder ein eigenes Bild. Die Oberflächenfarben werden automatisch aus dem dominanten Farbton der farbigen Bildbereiche abgeleitet (sättigungsgewichtetes Farbton-Histogramm), damit Menüs und Knöpfe zum Nebel passen.
+
+**Bildrechte:** Die mitgelieferten Hintergrundfotos (`frameforge/resources/backgrounds/`) sind Aufnahmen des Repository-Inhabers. Sie dürfen nur zusammen mit FrameForge verwendet werden und fallen nicht unter eine spätere Code-Lizenz.
+
 ---
 
 ## Lizenzhinweise der verwendeten Bibliotheken

@@ -11,6 +11,7 @@ from PySide6.QtCore import QSize, Qt, QUrl
 from PySide6.QtGui import QActionGroup, QColor, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QButtonGroup,
     QComboBox,
     QFileDialog,
@@ -49,7 +50,9 @@ from .components import Card, ZoomPreview, status_icon
 from .crash import open_log_folder, report_problem
 from .dashboard import OverviewPage
 from .pages import InfoPage, ReportsPage
+from .appearance import resolve
 from .resources import app_icon
+from .theme import apply_theme
 from .settings import Settings
 from .settings_page import SettingsPage
 from .starfield import StarfieldWidget
@@ -109,6 +112,7 @@ class MainWindow(QMainWindow):
         self._set_profile(self.settings.get("analysis/profile"))
         self._refresh_table()
         self._update_actions()
+        self.apply_appearance()
 
     # ================================================================ layout
     def _build_menu(self):
@@ -171,7 +175,7 @@ class MainWindow(QMainWindow):
         h.addAction(icons.icon("info"), f"Über {APP_NAME}", lambda: self.goto(PAGE_INFO))
 
     def _build_ui(self):
-        root = StarfieldWidget(enabled=self.settings.get("ui/starfield"))
+        root = StarfieldWidget()
         self.sky = root
         rl = QHBoxLayout(root)
         rl.setContentsMargins(0, 0, 0, 0)
@@ -227,6 +231,7 @@ class MainWindow(QMainWindow):
         self.settings_page = SettingsPage(self.settings)
         self.settings_page.updateAvailable.connect(self._on_update_result)
         self.settings_page.settingsChanged.connect(self._on_settings_changed)
+        self.settings_page.appearanceChanged.connect(self.apply_appearance)
         self.pages.addWidget(self.settings_page)
         self.info_page = InfoPage()
         self.info_page.checkUpdates.connect(self.check_updates_now)
@@ -474,8 +479,15 @@ class MainWindow(QMainWindow):
         if hasattr(self, "settings_page"):
             self.settings_page.sync_from_settings()
 
+    def apply_appearance(self):
+        """Apply background image and the matching colour palette."""
+        mode, path, dim, palette = resolve(self.settings)
+        apply_theme(QApplication.instance(), palette)
+        self.sky.set_background(mode, path, dim, palette.bg)
+        if hasattr(self, "settings_page"):
+            self.settings_page.sync_background_tiles()
+
     def _on_settings_changed(self):
-        self.sky.set_enabled_sky(self.settings.get("ui/starfield"))
         self._set_profile(self.settings.get("analysis/profile"))
         self._set_mode(self.settings.get("analysis/mode"))
 

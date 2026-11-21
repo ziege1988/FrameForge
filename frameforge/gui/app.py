@@ -14,7 +14,7 @@ from .. import APP_NAME, APP_SUBTITLE, ORGANIZATION, __version__
 SPLASH_MIN_SECONDS = 1.5
 
 
-def _splash_pixmap(ratio: float) -> QPixmap:
+def _splash_pixmap(ratio: float, settings=None) -> QPixmap:
     from .resources import logo_pixmap
 
     w, h = 640, 360
@@ -37,7 +37,25 @@ def _splash_pixmap(ratio: float) -> QPixmap:
     clip.addRoundedRect(QRectF(1, 1, w - 2, h - 2), 17, 17)
     p.setClipPath(clip)
     p.setOpacity(0.9)
-    p.drawPixmap(QRectF(0, 0, w, h), render_starfield(w, h, ratio, density=1.8), QRectF(0, 0, w * ratio, h * ratio))
+    bg_pm, accent = None, None
+    if settings is not None:
+        try:
+            from PySide6.QtGui import QImage
+
+            from .appearance import resolve
+            from .starfield import render_image_background
+
+            mode, path, dim, pal = resolve(settings)
+            accent = pal.accent
+            if mode == "image":
+                img = QImage(str(path))
+                if not img.isNull():
+                    bg_pm = render_image_background(img, w, h, ratio, max(dim, 35), pal.bg)
+        except Exception:  # the splash must never fail
+            bg_pm = None
+    if bg_pm is None:
+        bg_pm = render_starfield(w, h, ratio, density=1.8)
+    p.drawPixmap(QRectF(0, 0, w, h), bg_pm, QRectF(0, 0, w * ratio, h * ratio))
     p.setOpacity(1.0)
     p.setClipping(False)
     p.drawPixmap(QRectF(28, 62, 230, 230), logo_pixmap(230, ratio), QRectF(0, 0, 230 * ratio, 230 * ratio))
@@ -53,8 +71,12 @@ def _splash_pixmap(ratio: float) -> QPixmap:
     p.drawText(x, base, "Frame")
     fx = x + fm.horizontalAdvance("Frame")
     blue = QLinearGradient(fx, 0, fx + fm.horizontalAdvance("Forge"), 0)
-    blue.setColorAt(0, QColor("#5aa0ff"))
-    blue.setColorAt(1, QColor("#2f6bff"))
+    if accent:
+        blue.setColorAt(0, QColor(accent).lighter(125))
+        blue.setColorAt(1, QColor(accent))
+    else:
+        blue.setColorAt(0, QColor("#5aa0ff"))
+        blue.setColorAt(1, QColor("#2f6bff"))
     p.setPen(QPen(blue, 1))
     p.drawText(fx, base, "Forge")
 
@@ -124,7 +146,9 @@ def main(argv=None) -> int:
     file_filter = FileOpenFilter()
     app.installEventFilter(file_filter)
 
-    splash = QSplashScreen(_splash_pixmap(app.devicePixelRatio()), Qt.WindowStaysOnTopHint)
+    from .settings import Settings
+
+    splash = QSplashScreen(_splash_pixmap(app.devicePixelRatio(), Settings()), Qt.WindowStaysOnTopHint)
     splash.setAttribute(Qt.WA_TranslucentBackground)
     splash.show()
     t0 = time.monotonic()

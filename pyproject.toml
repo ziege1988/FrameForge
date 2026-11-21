@@ -36,7 +36,7 @@ version = { attr = "frameforge.__version__" }
 include = ["frameforge*"]
 
 [tool.setuptools.package-data]
-frameforge = ["resources/*"]
+frameforge = ["resources/*", "resources/backgrounds/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

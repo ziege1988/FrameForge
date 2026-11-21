@@ -20,7 +20,9 @@ DEFAULTS = {
     "ui/last_dir": "",
     "ui/show_welcome": True,
     "ui/trace_auto_open": True,
-    "ui/starfield": True,
+    "ui/background": "sky",
+    "ui/background_custom": "",
+    "ui/background_dim": 35,
     "ui/geometry": None,
     "ui/state": None,
 }

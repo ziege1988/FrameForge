@@ -18,7 +18,8 @@ from PySide6.QtWidgets import (
 )
 
 from . import icons
-from .theme import ACCENT, CARD_BORDER, GOOD, verdict_bg, verdict_color
+from . import theme
+from .theme import CARD_BORDER, GOOD, verdict_bg, verdict_color
 from .widgets import PreviewWidget
 
 
@@ -64,7 +65,10 @@ class OptionButton(QFrame):
         col = QVBoxLayout()
         col.setSpacing(1)
         t = QLabel(title)
-        t.setStyleSheet(f"font-size: 14px; color: {'#8fbaff' if primary else '#ffffff'}; background: transparent;")
+        if primary:
+            t.setObjectName("optTitle")
+        else:
+            t.setStyleSheet("font-size: 14px; color: #ffffff; background: transparent;")
         sub = QLabel(subtitle)
         sub.setObjectName("muted")
         sub.setStyleSheet("background: transparent;")
@@ -216,7 +220,8 @@ class ZoomPreview(QWidget):
         self.fit_btn.setToolTip("Ins Fenster einpassen")
         self.fit_btn.clicked.connect(lambda: self.zoom_box.setCurrentIndex(0))
         self.map_btn = QToolButton()
-        self.map_btn.setIcon(icons.icon("crop", active_color=ACCENT))
+        self.map_btn.setIcon(icons.icon("crop", active_color=theme.accent()))
+        theme.bus.changed.connect(self._on_theme)
         self.map_btn.setCheckable(True)
         self.map_btn.setChecked(show_map)
         self.map_btn.setToolTip("Analysebereich und lokale Qualitätskarte ein-/ausblenden")
@@ -226,6 +231,10 @@ class ZoomPreview(QWidget):
         lay.addLayout(row)
         self.caption.setVisible(show_caption)
         self.view.show_map = show_map
+
+    def _on_theme(self, p):
+        self.map_btn.setIcon(icons.icon("crop", active_color=p.accent))
+        self.view.update()
 
     def set_frame(self, img, roi=None, local=None, caption: str = "", full_loader=None):
         self._base = (img, roi, local, caption)

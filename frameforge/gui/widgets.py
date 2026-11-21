@@ -8,7 +8,8 @@ from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPainterPath, QPen, Q
 from PySide6.QtWidgets import QSizePolicy, QToolTip, QWidget
 
 from ..core.scoring import COMPONENT_LABELS, component_label
-from .theme import ACCENT, MUTED, score_color
+from . import theme
+from .theme import MUTED, score_color
 
 SERIES_COLORS = ["#3d8bff", "#ff9a3c", "#4cc38a", "#c77dff", "#e5534b", "#e8b339", "#3fd0c9", "#ff6fa5"]
 
@@ -86,13 +87,13 @@ class QualityPlot(QWidget):
 
         if self._threshold is not None and len(self._series) == 1:
             y = r.bottom() - self._threshold / 100 * r.height()
-            pen = QPen(QColor(ACCENT), 1, Qt.DashLine)
+            pen = QPen(QColor(theme.accent()), 1, Qt.DashLine)
             p.setPen(pen)
             p.drawLine(QPointF(r.left(), y), QPointF(r.right(), y))
             p.drawText(QRectF(r.right() - 220, y - 18, 216, 16), Qt.AlignRight, "Auswahlschwelle")
 
         for n, s in enumerate(self._series):
-            color = QColor(SERIES_COLORS[n % len(SERIES_COLORS)])
+            color = QColor(theme.accent() if n == 0 else SERIES_COLORS[n % len(SERIES_COLORS)])
             xs = self._x_values(s)
             ys = s["y"]
             if xs.size > 1:
@@ -121,7 +122,7 @@ class QualityPlot(QWidget):
         if len(self._series) > 1:
             lx, ly = r.left() + 8, r.top() + 4
             for n, s in enumerate(self._series[:8]):
-                p.setPen(QPen(QColor(SERIES_COLORS[n % len(SERIES_COLORS)]), 3))
+                p.setPen(QPen(QColor(theme.accent() if n == 0 else SERIES_COLORS[n % len(SERIES_COLORS)]), 3))
                 p.drawLine(QPointF(lx, ly + 8 + n * 16), QPointF(lx + 16, ly + 8 + n * 16))
                 p.setPen(QColor("#e6e9f2"))
                 p.drawText(QPointF(lx + 22, ly + 12 + n * 16), s["name"])
@@ -247,7 +248,7 @@ class PreviewWidget(QWidget):
                         p.fillRect(cell, col)
                         p.setPen(QColor(255, 255, 255, 170))
                         p.drawText(cell, Qt.AlignCenter, f"{t * 100:.0f}")
-            p.setPen(QPen(QColor(ACCENT), 1.5, Qt.DashLine))
+            p.setPen(QPen(QColor(theme.accent()), 1.5, Qt.DashLine))
             p.drawRect(rr)
         if self.zoom is None and self._caption:
             p.setPen(QColor(MUTED))

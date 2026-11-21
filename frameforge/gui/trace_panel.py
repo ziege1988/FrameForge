@@ -18,7 +18,8 @@ from PySide6.QtWidgets import (
 
 from ..core.trace import Tracer
 from . import icons
-from .theme import ACCENT, BAD, CARD_BORDER, GOOD, MUTED, WARN
+from . import theme
+from .theme import BAD, CARD_BORDER, GOOD, MUTED, WARN
 
 PANEL_WIDTH = 640  # maximum; limited to 42 % of the window width
 MAX_LINES = 4000  # lines kept in the view
@@ -54,7 +55,7 @@ class TraceHighlighter(QSyntaxHighlighter):
             self.setFormat(0, len(text), _fmt("#6ea8ff", bold=True))
             return
         if text.startswith(">>>"):
-            self.setFormat(0, 3, _fmt(ACCENT, bold=True))
+            self.setFormat(0, 3, _fmt(theme.accent(), bold=True))
         for rx, fmt in self.RULES:
             for m in rx.finditer(text):
                 self.setFormat(m.start(), m.end() - m.start(), fmt)
@@ -84,7 +85,8 @@ class TracePanel(QFrame):
         lay.setSpacing(6)
         head = QHBoxLayout()
         ic = QLabel()
-        ic.setPixmap(icons.pixmap("analysis", 18, ACCENT))
+        ic.setPixmap(icons.pixmap("analysis", 18, theme.accent()))
+        self._title_icon = ic
         head.addWidget(ic)
         title = QLabel("Rechenprotokoll")
         title.setObjectName("h2")
@@ -132,10 +134,18 @@ class TracePanel(QFrame):
         self._anim.setDuration(260)
         self._anim.setEasingCurve(QEasingCurve.OutCubic)
         self._set_live(False)
+        theme.bus.changed.connect(self._on_theme)
+
+    def _on_theme(self, p):
+        self._title_icon.setPixmap(icons.pixmap("analysis", 18, p.accent))
+        for b in (self.follow_btn, self.copy_btn, self.clear_btn):
+            b.setIcon(icons.icon(b.property("iconName"), "#c9d2e6", p.accent))
+        self.highlighter.rehighlight()
 
     def _tool(self, icon_name, tip, checkable=False) -> QToolButton:
         b = QToolButton()
-        b.setIcon(icons.icon(icon_name, "#c9d2e6", ACCENT))
+        b.setIcon(icons.icon(icon_name, "#c9d2e6", theme.accent()))
+        b.setProperty("iconName", icon_name)
         b.setToolTip(tip)
         b.setCheckable(checkable)
         return b
@@ -196,6 +206,13 @@ class TracePanel(QFrame):
         self._drain()
         self._timer.stop()
         self._set_live(False)
+        theme.bus.changed.connect(self._on_theme)
+
+    def _on_theme(self, p):
+        self._title_icon.setPixmap(icons.pixmap("analysis", 18, p.accent))
+        for b in (self.follow_btn, self.copy_btn, self.clear_btn):
+            b.setIcon(icons.icon(b.property("iconName"), "#c9d2e6", p.accent))
+        self.highlighter.rehighlight()
         self._update_stats()
 
     def clear(self):

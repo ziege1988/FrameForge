@@ -23,7 +23,7 @@ from ..core.analyzer import MODE_LABELS
 from ..core.profiles import PROFILES
 from . import icons
 from .components import Card, format_duration
-from .dashboard import slogan_label, wordmark
+from .dashboard import ThemedLabel, slogan_label, wordmark
 from .resources import logo_pixmap
 from .theme import GOOD, MUTED, score_color, verdict_color
 
@@ -203,8 +203,7 @@ class InfoPage(QWidget):
                    "klarer Begründungen.")
         t.setWordWrap(True)
         desc.body.addWidget(t)
-        hl = QLabel("Highlights im Detail")
-        hl.setStyleSheet("font-size: 15px; font-weight: 600; color: #4f95ff;")
+        hl = ThemedLabel("<span style='font-size:15px; font-weight:600; color:{accent}'>Highlights im Detail</span>")
         desc.body.addWidget(hl)
         for text in (
             "Automatische Analyse – erkennt die besten Bilder und Videos",
@@ -261,7 +260,7 @@ class InfoPage(QWidget):
         t.setObjectName("muted")
         lic.body.addWidget(t)
         lay.addWidget(lic)
-        foot = QLabel(f"<i><b style='color:#4f95ff'>{APP_NAME}</b> – mehr aus deinen Daten herausholen.</i>")
+        foot = ThemedLabel(f"<i><b style='color:{{accent}}'>{APP_NAME}</b> – mehr aus deinen Daten herausholen.</i>")
         foot.setAlignment(Qt.AlignRight)
         lay.addWidget(foot)
         lay.addStretch(1)
