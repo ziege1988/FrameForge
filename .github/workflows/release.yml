@@ -67,7 +67,7 @@ jobs:
       - name: macOS DMG
         if: runner.os == 'macOS'
         run: packaging/macos/build_dmg.sh "${{ steps.version.outputs.version }}" "${{ matrix.target == 'macos-arm64' && 'arm64' || 'x86_64' }}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target }}
           path: |
