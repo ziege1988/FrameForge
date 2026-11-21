@@ -8,6 +8,11 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Release veröffentlichen (Tag v<Version> aus frameforge/__init__.py wird angelegt)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -77,13 +82,23 @@ jobs:
 
   release:
     needs: build
-    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/v') || inputs.publish) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - name: Tag
+        id: tag
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then TAG="${GITHUB_REF_NAME}"; else
+            TAG="v$(sed -n 's/^__version__ = "\(.*\)"/\1/p' frameforge/__init__.py)"; fi
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]] && git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG existiert bereits – Version in frameforge/__init__.py erhöhen"; exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Release: $TAG"
       - name: Release notes from CHANGELOG.md
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${{ steps.tag.outputs.tag }}"; VERSION="${VERSION#v}"
           awk -v v="$VERSION" '$0 ~ "^## "v"( |$)" {f=1; next} /^## / && f {exit} f' CHANGELOG.md > notes.md
           [ -s notes.md ] || echo "Siehe CHANGELOG.md" > notes.md
           cat notes.md
@@ -101,6 +116,9 @@ jobs:
           cat SHA256SUMS.txt
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: FrameForge ${{ steps.tag.outputs.tag }}
           files: assets/*
           body_path: notes.md
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(steps.tag.outputs.tag, '-') }}

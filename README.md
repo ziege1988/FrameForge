@@ -150,7 +150,7 @@ tests/             pytest-Suite mit synthetischen Testdaten
 ### Release erstellen (löst auch die In-App-Updates aus)
 
 1. Version in `frameforge/__init__.py` erhöhen und `CHANGELOG.md` ergänzen.
-2. Commit, dann Tag pushen: `git tag v0.2.0 && git push origin v0.2.0`
+2. Commit pushen, dann auf GitHub *Actions › Release › Run workflow* mit Haken **„Release veröffentlichen“** starten (alternativ Tag pushen: `git tag v0.2.0 && git push origin v0.2.0`).
 3. GitHub Actions baut Windows- und macOS-Installer, erzeugt `SHA256SUMS.txt` und veröffentlicht das Release. Tags mit Bindestrich (z. B. `v0.3.0-beta.1`) werden als Vorabversion markiert und nur angeboten, wenn *„Auch Vorabversionen anbieten“* aktiviert ist.
 
 **Hinweise zur Build-Pipeline (kostenfreie Variante):** Für öffentliche Repositories sind die GitHub-Actions-Builds kostenlos. Release-Builds installieren nur fertige Binärpakete; fehlt für eine Plattform (z. B. Intel-Macs) ein Paket, schlägt nur dieser Build schnell fehl, die übrigen Pakete werden trotzdem veröffentlicht. Den Build kann man ohne Veröffentlichung testen: *Actions › Release › Run workflow*.
