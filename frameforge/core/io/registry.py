@@ -13,7 +13,7 @@ RAW_EXTENSIONS = {
 }
 FORMAT_GROUPS = {
     "SER": {".ser"},
-    "AVI": {".avi"},
+    "Video": {".avi", ".mp4", ".mov", ".mkv", ".m4v"},
     "FITS": {".fits", ".fit", ".fts"},
     "TIFF": {".tif", ".tiff"},
     "RAW": RAW_EXTENSIONS,
@@ -35,7 +35,7 @@ def open_source(path: str | os.PathLike) -> FrameSource:
     if ext == ".ser":
         from .ser import SerSource
         return SerSource(p)
-    if ext == ".avi":
+    if ext in FORMAT_GROUPS["Video"]:
         from .video import VideoSource
         return VideoSource(p)
     if ext in FORMAT_GROUPS["FITS"]:

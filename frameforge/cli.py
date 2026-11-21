@@ -70,7 +70,7 @@ def main(argv=None) -> int:
     if args.export_best:
         args.export_best.mkdir(parents=True, exist_ok=True)
         for f in session.ranked():
-            if f.error is None and f.info.is_video and f.verdict != "Nicht empfohlen":
+            if f.error is None and f.info.is_video and f.verdict != "Abgelehnt":
                 dest, n = export_best_frames(f, args.export_best / f"{f.path.stem}_best.ser", options=opts)
                 print(f"→ {dest.name}: {n} Frames")
     return 0

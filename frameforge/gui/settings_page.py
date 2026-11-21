@@ -1,26 +1,25 @@
-"""Settings dialog including the update section."""
+"""Settings page (analysis defaults, start dialog, updates). Changes are saved immediately."""
 
 from __future__ import annotations
 
 import os
 from datetime import datetime
+from pathlib import Path
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
-    QDialog,
-    QDialogButtonBox,
     QFormLayout,
-    QGroupBox,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSpinBox,
-    QTabWidget,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
@@ -29,90 +28,115 @@ from PySide6.QtWidgets import (
 from .. import APP_NAME, UPDATE_REPOSITORY, __version__, updater
 from ..core.analyzer import MODE_LABELS
 from ..core.profiles import PROFILES
+from .components import Card
 from .settings import Settings
 from .workers import DownloadWorker, UpdateCheckWorker
 
 
-class SettingsDialog(QDialog):
+class SettingsPage(QWidget):
     updateAvailable = Signal(object)
+    settingsChanged = Signal()
 
-    def __init__(self, settings: Settings, parent=None, open_updates: bool = False, release=None):
+    def __init__(self, settings: Settings, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Einstellungen")
-        self.setMinimumSize(560, 520)
         self.settings = settings
-        self._release = release
+        self._release = None
         self._check_worker = None
         self._download_worker = None
 
-        tabs = QTabWidget()
-        tabs.addTab(self._analysis_tab(), "Analyse")
-        tabs.addTab(self._updates_tab(), "Updates")
-        if open_updates:
-            tabs.setCurrentIndex(1)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        outer.addWidget(scroll)
+        content = QWidget()
+        scroll.setWidget(content)
+        lay = QVBoxLayout(content)
+        lay.setContentsMargins(24, 20, 24, 20)
+        lay.setSpacing(16)
+        title = QLabel("Einstellungen")
+        title.setObjectName("h1")
+        lay.addWidget(title)
+        grid = QGridLayout()
+        grid.setSpacing(16)
+        left = QVBoxLayout()
+        left.setSpacing(16)
+        left.addWidget(self._analysis_card())
+        left.addWidget(self._general_card())
+        left.addStretch(1)
+        grid.addLayout(left, 0, 0)
+        grid.addWidget(self._updates_card(), 0, 1, Qt.AlignTop)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+        lay.addLayout(grid)
+        lay.addStretch(1)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Ok).setText("Speichern")
-        buttons.button(QDialogButtonBox.Cancel).setText("Abbrechen")
-        buttons.accepted.connect(self._save)
-        buttons.rejected.connect(self.reject)
-
-        layout = QVBoxLayout(self)
-        layout.addWidget(tabs)
-        layout.addWidget(buttons)
-        if release is not None:
-            self._show_release(release)
-
-    # ------------------------------------------------------------------
-    def _analysis_tab(self) -> QWidget:
-        w = QWidget()
-        form = QFormLayout(w)
+    # ------------------------------------------------------------------ cards
+    def _analysis_card(self) -> Card:
+        card = Card("Analyse", "analysis")
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignRight)
         self.profile = QComboBox()
         for key, prof in PROFILES.items():
             self.profile.addItem(prof.name, key)
         self.profile.setCurrentIndex(max(0, self.profile.findData(self.settings.get("analysis/profile"))))
+        self.profile.currentIndexChanged.connect(lambda: self._store("analysis/profile", self.profile.currentData()))
         self.mode = QComboBox()
         for key, label in MODE_LABELS.items():
             self.mode.addItem(label, key)
         self.mode.setCurrentIndex(max(0, self.mode.findData(self.settings.get("analysis/mode"))))
+        self.mode.currentIndexChanged.connect(lambda: self._store("analysis/mode", self.mode.currentData()))
         self.threads = QSpinBox()
         self.threads.setRange(1, max(1, os.cpu_count() or 1))
         self.threads.setValue(self.settings.get("analysis/threads"))
+        self.threads.valueChanged.connect(lambda v: self._store("analysis/threads", v))
         self.recursive = QCheckBox("Unterordner einbeziehen")
         self.recursive.setChecked(self.settings.get("analysis/recursive"))
+        self.recursive.toggled.connect(lambda v: self._store("analysis/recursive", v))
         form.addRow("Standardprofil:", self.profile)
-        form.addRow("Standard-Analysemodus:", self.mode)
+        form.addRow("Analysemodus:", self.mode)
         form.addRow("Rechen-Threads:", self.threads)
         form.addRow("", self.recursive)
+        card.body.addLayout(form)
         hint = QLabel(
-            "<b>Schnell</b>: bis zu 200 Frames je Video, reduzierte Auflösung – für einen ersten Überblick.<br>"
+            "<b>Schnell</b>: bis zu 200 Frames je Video, reduzierte Auflösung – erster Überblick.<br>"
             "<b>Standard</b>: bis zu 1000 Frames je Video.<br>"
-            "<b>Vollständig</b>: jeder Frame in voller Auflösung – exakte Frame-Selektion.<br><br>"
-            "Alle Analysen laufen lokal auf diesem Computer. Es werden keine Bilddaten hochgeladen."
+            "<b>Vollständig</b>: jeder Frame in voller Auflösung – exakte Frame-Selektion."
         )
         hint.setWordWrap(True)
         hint.setObjectName("muted")
-        form.addRow(hint)
-        return w
+        card.body.addWidget(hint)
+        return card
 
-    def _updates_tab(self) -> QWidget:
-        w = QWidget()
-        v = QVBoxLayout(w)
-        info = QGroupBox("Installierte Version")
-        fl = QFormLayout(info)
-        fl.addRow("Version:", QLabel(f"{APP_NAME} {__version__}"))
-        last = self.settings.get("updates/last_check") or "noch nie"
-        self.last_check = QLabel(last)
-        fl.addRow("Zuletzt geprüft:", self.last_check)
-        v.addWidget(info)
+    def _general_card(self) -> Card:
+        card = Card("Allgemein", "settings")
+        self.show_welcome = QCheckBox("Willkommensdialog beim Start anzeigen")
+        self.show_welcome.setChecked(self.settings.get("ui/show_welcome"))
+        self.show_welcome.toggled.connect(lambda v: self._store("ui/show_welcome", v))
+        card.body.addWidget(self.show_welcome)
+        note = QLabel("Alle Analysen laufen lokal auf diesem Computer. Es werden keine Bilddaten hochgeladen; "
+                      "eine Internetverbindung wird nur für die Update-Prüfung verwendet.")
+        note.setWordWrap(True)
+        note.setObjectName("muted")
+        card.body.addWidget(note)
+        return card
 
+    def _updates_card(self) -> Card:
+        card = Card("Updates", "update")
+        form = QFormLayout()
+        form.addRow("Installierte Version:", QLabel(f"{APP_NAME} {__version__}"))
+        self.last_check = QLabel(self.settings.get("updates/last_check") or "noch nie")
+        form.addRow("Zuletzt geprüft:", self.last_check)
+        card.body.addLayout(form)
         self.check_on_start = QCheckBox("Beim Programmstart automatisch nach Updates suchen")
         self.check_on_start.setChecked(self.settings.get("updates/check_on_start"))
+        self.check_on_start.toggled.connect(lambda v: self._store("updates/check_on_start", v))
         self.prerelease = QCheckBox("Auch Vorabversionen (Beta) anbieten")
         self.prerelease.setChecked(self.settings.get("updates/include_prerelease"))
-        v.addWidget(self.check_on_start)
-        v.addWidget(self.prerelease)
-
+        self.prerelease.toggled.connect(lambda v: self._store("updates/include_prerelease", v))
+        card.body.addWidget(self.check_on_start)
+        card.body.addWidget(self.prerelease)
         row = QHBoxLayout()
         self.check_btn = QPushButton("Nach Updates suchen")
         self.check_btn.clicked.connect(self.check_updates)
@@ -120,14 +144,16 @@ class SettingsDialog(QDialog):
         self.status.setWordWrap(True)
         row.addWidget(self.check_btn)
         row.addWidget(self.status, 1)
-        v.addLayout(row)
+        card.body.addLayout(row)
 
-        self.release_box = QGroupBox("Verfügbares Update")
+        self.release_box = QWidget()
         rb = QVBoxLayout(self.release_box)
+        rb.setContentsMargins(0, 6, 0, 0)
         self.release_title = QLabel()
-        self.release_title.setObjectName("h1")
+        self.release_title.setObjectName("h2")
         self.notes = QTextBrowser()
         self.notes.setOpenExternalLinks(True)
+        self.notes.setMinimumHeight(140)
         self.progress = QProgressBar()
         self.progress.hide()
         btns = QHBoxLayout()
@@ -145,16 +171,27 @@ class SettingsDialog(QDialog):
         rb.addWidget(self.progress)
         rb.addLayout(btns)
         self.release_box.hide()
-        v.addWidget(self.release_box, 1)
-        src = QLabel(f"Updates werden aus den GitHub-Releases von <i>{UPDATE_REPOSITORY}</i> geladen "
-                     "und vor der Installation per SHA-256-Prüfsumme verifiziert.")
+        card.body.addWidget(self.release_box, 1)
+        src = QLabel(f"Updates werden aus den GitHub-Releases von <i>{UPDATE_REPOSITORY}</i> geladen und vor der "
+                     "Installation per SHA-256-Prüfsumme verifiziert.")
         src.setWordWrap(True)
         src.setObjectName("muted")
-        v.addWidget(src)
-        v.addStretch(0)
-        return w
+        card.body.addWidget(src)
+        card.body.addStretch(1)
+        return card
 
-    # ------------------------------------------------------------------
+    def _store(self, key, value):
+        self.settings.set(key, value)
+        self.settings.sync()
+        self.settingsChanged.emit()
+
+    def sync_from_settings(self):
+        for box, key in ((self.profile, "analysis/profile"), (self.mode, "analysis/mode")):
+            box.blockSignals(True)
+            box.setCurrentIndex(max(0, box.findData(self.settings.get(key))))
+            box.blockSignals(False)
+
+    # ---------------------------------------------------------------- updates
     def check_updates(self):
         if self._check_worker and self._check_worker.isRunning():
             return
@@ -162,7 +199,7 @@ class SettingsDialog(QDialog):
         self.status.setText("Suche nach Updates …")
         self._check_worker = UpdateCheckWorker(self.prerelease.isChecked(), self)
         self._check_worker.result.connect(self._on_check_result)
-        self._check_worker.failed.connect(self._on_check_failed)
+        self._check_worker.failed.connect(lambda msg: self.status.setText(f"⚠ {msg}"))
         self._check_worker.finished.connect(lambda: self.check_btn.setEnabled(True))
         self._check_worker.start()
 
@@ -175,21 +212,16 @@ class SettingsDialog(QDialog):
             self.release_box.hide()
             return
         self.status.setText("Ein Update ist verfügbar.")
-        self._show_release(release)
+        self.show_release(release)
         self.updateAvailable.emit(release)
 
-    def _on_check_failed(self, msg):
-        self.status.setText(f"⚠ {msg}")
-
-    def _show_release(self, release):
+    def show_release(self, release):
         self._release = release
         pre = " (Vorabversion)" if release.prerelease else ""
-        self.release_title.setText(f"Version {release.version}{pre}")
-        date = f"<p style='color:#8b93a7'>Veröffentlicht am {release.published}</p>" if release.published else ""
-        notes = release.notes.strip() or "Keine Versionshinweise vorhanden."
-        self.notes.setMarkdown(notes)
-        if date:
-            self.notes.setHtml(date + self.notes.toHtml())
+        self.release_title.setText(f"Version {release.version}{pre} verfügbar")
+        self.notes.setMarkdown(release.notes.strip() or "Keine Versionshinweise vorhanden.")
+        if release.published:
+            self.notes.setHtml(f"<p style='color:#8a94ad'>Veröffentlicht am {release.published}</p>" + self.notes.toHtml())
         asset = release.asset_for()
         _, why = updater.can_self_install()
         if asset is None:
@@ -244,8 +276,6 @@ class SettingsDialog(QDialog):
             self._download_worker.cancel()
 
     def _on_downloaded(self, path):
-        from pathlib import Path
-
         self.cancel_dl_btn.hide()
         self.progress.setFormat("Download abgeschlossen – Installation startet …")
         try:
@@ -253,26 +283,12 @@ class SettingsDialog(QDialog):
         except updater.UpdateError as exc:
             QMessageBox.warning(self, "Update", str(exc))
             return
-        self._save()
+        self.settings.sync()
         QApplication.instance().quit()
 
-    def _cancel_download_on_close(self):  # noqa: D401
-        if self._download_worker and self._download_worker.isRunning():
-            self._download_worker.cancel()
-            self._download_worker.wait(3000)
-
-    def reject(self):
-        self._cancel_download_on_close()
-        super().reject()
-
-    def _save(self):
-        s = self.settings
-        s.set("analysis/profile", self.profile.currentData())
-        s.set("analysis/mode", self.mode.currentData())
-        s.set("analysis/threads", self.threads.value())
-        s.set("analysis/recursive", self.recursive.isChecked())
-        s.set("updates/check_on_start", self.check_on_start.isChecked())
-        s.set("updates/include_prerelease", self.prerelease.isChecked())
-        s.sync()
-        if self.isVisible():
-            self.accept()
+    def shutdown(self):
+        for w in (self._download_worker, self._check_worker):
+            if w and w.isRunning():
+                if hasattr(w, "cancel"):
+                    w.cancel()
+                w.wait(3000)

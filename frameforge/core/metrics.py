@@ -70,12 +70,17 @@ class FrameMetrics:
     low_signal: bool
     roi: tuple[int, int, int, int]
     thumb: np.ndarray | None = None
+    # Deep-sky (star) metrics – NaN/0 for other profiles
+    fwhm: float = float("nan")
+    eccentricity: float = float("nan")
+    star_count: int = 0
+    background: float = float("nan")
 
 
 SCALAR_FIELDS = (
     "sharpness", "tenengrad", "contrast", "noise_sigma", "snr", "signal", "peak", "clip_high",
     "clip_low", "coherence", "blur_angle", "uniformity", "centroid_x", "centroid_y",
-    "object_fraction", "touches_edge", "low_signal",
+    "object_fraction", "touches_edge", "low_signal", "fwhm", "eccentricity", "star_count", "background",
 )
 
 
@@ -185,6 +190,10 @@ def estimate_noise(img: np.ndarray, mask: np.ndarray | None = None, exclude_edge
 def compute_metrics(frame: np.ndarray, profile: Profile, index: int = 0, scale: float = 1.0,
                     detection: Detection | None = None, with_thumb: bool = True) -> FrameMetrics:
     """Compute all quality metrics of one luminance frame."""
+    if profile.key == "deepsky":
+        from .deepsky import compute_star_metrics
+
+        return compute_star_metrics(frame, profile, index, scale, with_thumb)
     det = detection or detect_object(frame, profile)
     x, y, w, h = det.roi
     roi = frame[y:y + h, x:x + w]

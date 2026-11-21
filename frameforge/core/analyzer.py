@@ -76,6 +76,7 @@ class FileResult:
     rank: int = 0
     reasons: list[Reason] = field(default_factory=list)
     recommendations: list[str] = field(default_factory=list)
+    summary: str = ""
     best_index: int = 0
     preview: np.ndarray | None = None  # uint8 luminance of best frame
     preview_roi: tuple[int, int, int, int] | None = None
@@ -104,6 +105,7 @@ class FileResult:
             "rank": self.rank,
             "score": self.score,
             "verdict": self.verdict,
+            "summary": self.summary,
             "potential": self.potential,
             "components": {k: (None if v is None else round(v, 1)) for k, v in self.components.items()},
             "reasons": [r.to_dict() for r in self.reasons],
@@ -133,6 +135,7 @@ class SessionResult:
     created: datetime
     recommendations: list[str] = field(default_factory=list)
     cancelled: bool = False
+    elapsed_s: float = 0.0
 
     def ranked(self) -> list[FileResult]:
         return sorted(self.files, key=lambda f: (f.error is not None, -f.score))
@@ -146,6 +149,7 @@ class SessionResult:
             "profile": self.profile,
             "mode": self.mode,
             "cancelled": self.cancelled,
+            "elapsed_s": round(self.elapsed_s, 2),
             "recommendations": self.recommendations,
             "files": [f.to_dict(include_frames) for f in self.ranked()],
         }
@@ -215,12 +219,13 @@ def analyze_file(path: str | os.PathLike, options: AnalysisOptions, progress: Ca
                              for k in SCALAR_FIELDS}
             result.local_maps = np.stack([m.local_map for m in metrics])
             result.positions = positions
-            result.quality = frame_quality(result.arrays)
+            result.quality = frame_quality(result.arrays, profile.key)
 
             ts = source.timestamps()
             if ts is not None and ts.size == info.frame_count:
                 result.times = ts[result.indices]
-            start = info.metadata.get("start_utc") if info.metadata else None
+            md = info.metadata or {}
+            start = md.get("start_utc") or md.get("date_obs")
             result.timeline_start = _parse_start(start) or result.path.stat().st_mtime
 
             best_pos = int(np.argmax(result.quality))
@@ -294,6 +299,11 @@ def _process_frames(source, indices, profile, scale, threads, progress, cancel,
     return out, np.array(positions, dtype=np.float64).reshape(-1, 2)
 
 
+def _nanmedian(values: np.ndarray) -> float:
+    finite = values[np.isfinite(values)]
+    return float(np.median(finite)) if finite.size else float("nan")
+
+
 def _aggregate(result: FileResult, metrics: list[FrameMetrics], info: SourceInfo, frame_shape) -> dict:
     a = result.arrays
     q = result.quality
@@ -349,6 +359,10 @@ def _aggregate(result: FileResult, metrics: list[FrameMetrics], info: SourceInfo
         "drift_px": drift,
         "jitter_rel": jitter / roi_diag if roi_diag else 0.0,
         "dropout_fraction": dropouts,
+        "fwhm": _nanmedian(a["fwhm"][top]),
+        "eccentricity": _nanmedian(a["eccentricity"][top]),
+        "star_count": int(np.median(a["star_count"][top])),
+        "background": _nanmedian(a["background"][top]),
         "quality_mean": float(np.mean(q)),
         "quality_cv": float(np.std(q) / np.mean(q)) if np.mean(q) > 0 else 0.0,
     }
@@ -368,6 +382,7 @@ def score_files(files: list[FileResult], profile: Profile) -> list[str]:
             f.recommendations = []
             continue
         f.components, f.score, f.verdict, f.potential = a.components, a.score, a.verdict, a.potential
+        f.summary = a.summary
         f.reasons = a.reasons
         if f.info and f.info.warnings:
             f.reasons = [Reason("info", w) for w in f.info.warnings] + f.reasons
@@ -389,6 +404,7 @@ def analyze_session(paths: Sequence[str | os.PathLike], options: AnalysisOptions
     session = SessionResult(files=results, profile=profile.key, mode=options.mode,
                             created=datetime.now(timezone.utc))
     n = len(files)
+    t0 = time.perf_counter()
     for i, path in enumerate(files):
         if cancel is not None and cancel.is_set():
             session.cancelled = True
@@ -408,6 +424,7 @@ def analyze_session(paths: Sequence[str | os.PathLike], options: AnalysisOptions
         if on_file:
             on_file(res)
     session.recommendations = score_files(results, profile)
+    session.elapsed_s = time.perf_counter() - t0
     if progress:
         progress("Analyse abgeschlossen" if not session.cancelled else "Analyse abgebrochen", 1.0)
     return session

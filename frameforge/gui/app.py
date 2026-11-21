@@ -6,7 +6,7 @@ import sys
 import time
 
 from PySide6.QtCore import QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPixmap
+from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QSplashScreen
 
 from .. import APP_NAME, APP_SUBTITLE, ORGANIZATION, __version__
@@ -17,32 +17,53 @@ SPLASH_MIN_SECONDS = 1.5
 def _splash_pixmap(ratio: float) -> QPixmap:
     from .resources import logo_pixmap
 
-    w, h = 560, 320
+    w, h = 640, 360
     pm = QPixmap(int(w * ratio), int(h * ratio))
     pm.setDevicePixelRatio(ratio)
     pm.fill(Qt.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.Antialiasing)
     grad = QLinearGradient(0, 0, w, h)
-    grad.setColorAt(0, QColor("#1b2440"))
-    grad.setColorAt(1, QColor("#070a14"))
+    grad.setColorAt(0, QColor("#0d1a3d"))
+    grad.setColorAt(1, QColor("#050914"))
     p.setBrush(grad)
-    p.setPen(Qt.NoPen)
-    p.drawRoundedRect(QRectF(0, 0, w, h), 18, 18)
-    p.drawPixmap(QRectF(36, 70, 150, 150), logo_pixmap(150, ratio), QRectF(0, 0, 150 * ratio, 150 * ratio))
+    p.setPen(QColor("#1e2a46"))
+    p.drawRoundedRect(QRectF(0.5, 0.5, w - 1, h - 1), 18, 18)
+    p.drawPixmap(QRectF(28, 62, 230, 230), logo_pixmap(230, ratio), QRectF(0, 0, 230 * ratio, 230 * ratio))
+
     title = QFont()
-    title.setPointSize(30)
+    title.setPointSize(38)
     title.setBold(True)
+    title.setItalic(True)
     p.setFont(title)
+    fm = p.fontMetrics()
+    x, base = 282, 168
     p.setPen(QColor("#ffffff"))
-    p.drawText(QRectF(210, 92, 330, 50), Qt.AlignLeft | Qt.AlignVCenter, APP_NAME)
-    sub = QFont()
-    sub.setPointSize(12)
-    p.setFont(sub)
-    p.setPen(QColor("#ffb469"))
-    p.drawText(QRectF(212, 140, 330, 24), Qt.AlignLeft | Qt.AlignVCenter, APP_SUBTITLE)
-    p.setPen(QColor("#8b93a7"))
-    p.drawText(QRectF(212, 166, 330, 24), Qt.AlignLeft | Qt.AlignVCenter, f"Version {__version__}")
+    p.drawText(x, base, "Frame")
+    fx = x + fm.horizontalAdvance("Frame")
+    blue = QLinearGradient(fx, 0, fx + fm.horizontalAdvance("Forge"), 0)
+    blue.setColorAt(0, QColor("#5aa0ff"))
+    blue.setColorAt(1, QColor("#2f6bff"))
+    p.setPen(QPen(blue, 1))
+    p.drawText(fx, base, "Forge")
+
+    slogan = QFont()
+    slogan.setPointSize(14)
+    slogan.setItalic(True)
+    p.setFont(slogan)
+    sx = x + 2
+    for word, bold in (("Analyse. ", False), ("Entscheide. ", True), ("Perfektioniere.", False)):
+        slogan.setBold(bold)
+        p.setFont(slogan)
+        p.setPen(QColor("#dfe7f7"))
+        p.drawText(sx, base + 36, word)
+        sx += p.fontMetrics().horizontalAdvance(word)
+    small = QFont()
+    small.setPointSize(10)
+    p.setFont(small)
+    p.setPen(QColor("#8a94ad"))
+    p.drawText(QRectF(x + 2, base + 52, 330, 20), Qt.AlignLeft | Qt.AlignVCenter,
+               f"{APP_SUBTITLE} · Version {__version__}")
     p.end()
     return pm
 
@@ -60,14 +81,14 @@ def main(argv=None) -> int:
     t0 = time.monotonic()
 
     def status(text: str):
-        splash.showMessage(text, Qt.AlignBottom | Qt.AlignHCenter, QColor("#c9cedb"))
+        splash.showMessage(text + "   ", Qt.AlignBottom | Qt.AlignRight, QColor("#8a94ad"))
         app.processEvents()
 
     status("Lade Analysemodule …")
     import cv2  # noqa: F401  (heavy imports happen while the splash is visible)
     import numpy  # noqa: F401
 
-    status("Lade Formate (SER, AVI, FITS, TIFF, RAW) …")
+    status("Lade Formate (SER, AVI, MP4, FITS, TIFF, RAW) …")
     from ..core import analyzer  # noqa: F401
     from ..core.io import fits, ser, tiff, video  # noqa: F401
 
@@ -85,12 +106,14 @@ def main(argv=None) -> int:
     def show_main():
         window.show()
         splash.finish(window)
-        # Command line arguments (e.g. files dropped on the app icon) are queued
+        # Files passed on the command line / dropped on the app icon are queued directly
         paths = [a for a in argv[1:] if not a.startswith("-")]
         if paths:
             from pathlib import Path
-            window.add_paths([Path(p) for p in paths])
-        QTimer.singleShot(1500, window.check_updates_silently)
+            window.open_paths([Path(p) for p in paths])
+        elif window.settings.get("ui/show_welcome"):
+            QTimer.singleShot(150, window.show_welcome)
+        QTimer.singleShot(2500, window.check_updates_silently)
 
     QTimer.singleShot(int(remaining * 1000), show_main)
     return app.exec()

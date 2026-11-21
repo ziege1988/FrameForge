@@ -1,5 +1,7 @@
 # FrameForge
 
+*Analyse. **Entscheide.** Perfektioniere.*
+
 **Astrophotography Quality Analyzer** – FrameForge untersucht große Mengen astronomischer Rohbilder und Videos automatisch auf ihre technische Qualität, erstellt eine nachvollziehbare Rangliste und ermittelt die besten Frames für das Stacking.
 
 > Nicht die Menge der Aufnahmen entscheidet, sondern die Qualität der Daten, aus denen das beste Ergebnis entsteht.
@@ -18,9 +20,11 @@ Desktop-Anwendung für **Windows und macOS**, vollständig lokal (kein Cloud-Upl
 | Frame-Selektion | Qualität jedes Frames, empfohlener Stacking-Anteil, Export der besten Frames als neue **SER-Datei** (Originaldaten, unverändert) oder als CSV-Liste |
 | Verarbeitungspotenzial | erwartetes Stack-SNR, Einstufung hoch / mittel / gering |
 | Session-Vergleich & Qualitätsverlauf | Qualitätskurven mehrerer Videos übereinander, Seeing-Schwankung, Trend über die Session |
-| Objektprofile | **Planeten**, **Mond**, **Sonne**, **Allgemein** – eigene Gewichtung, Belichtungsziele, ROI-Strategie |
+| Objektprofile | **Sonne**, **Mond**, **Planeten**, **Deep-Sky**, **Allgemein** – eigene Messgrößen, Gewichtung, Belichtungsziele |
+| Übersicht-Dashboard | Empfehlungsquote, Ø-Qualitäts-Score mit Trend, Top-Ergebnisse, Ausschluss-Gründe, Vorschau mit Zoom |
+| Projekte | komplette Analyse als `.ffproj` speichern und später ohne erneute Analyse öffnen |
 | Effiziente Verarbeitung | Frames werden einzeln gelesen; eine 614-MB-SER-Datei (2000 Frames) wird mit ca. 80 MB RAM in ~6 s vollständig analysiert (Messung auf 4 Kernen) |
-| Start-Popup mit Logo | Splash-Screen beim Programmstart |
+| Start-Popup mit Logo | Splash-Screen beim Programmstart, danach Willkommensdialog mit Schnellstart (abschaltbar) |
 | Updates | Prüfung beim Start, Anzeige & Installation direkt in *Einstellungen › Updates* (SHA-256-geprüft) |
 
 ### Unterstützte Formate
@@ -28,7 +32,7 @@ Desktop-Anwendung für **Windows und macOS**, vollständig lokal (kein Cloud-Upl
 | Format | Details |
 |---|---|
 | **SER** | 8/16 bit, Mono, Bayer, RGB/BGR, Zeitstempel; Byte-Reihenfolge wird aus dem Bildinhalt erkannt (das *LittleEndian*-Flag wird von Aufnahmeprogrammen uneinheitlich gesetzt) |
-| **AVI** | über OpenCV (z. B. Y800, MJPEG, unkomprimiert) |
+| **AVI, MP4, MOV, MKV** | über OpenCV/FFmpeg (z. B. Y800, MJPEG, H.264, unkomprimiert) |
 | **FITS** | eigener schlanker Reader: Einzelbild, RGB-Würfel, Frame-Würfel, Bild-Extensions, BZERO/BSCALE, Bayer-Header (`BAYERPAT`). Komprimierte FITS (fpack) optional über *astropy* |
 | **TIFF** | 8/16/32 bit, Mono/RGB, Multipage, LZW/ZIP-komprimiert |
 | **RAW** | CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2, PEF u. a. über LibRaw (Bayer-Rohdaten, ohne Entwicklung) |
@@ -49,6 +53,15 @@ Farbdaten werden für die Messung in Luminanz umgerechnet; Bayer-Daten werden 2�
 * **Bewegungsunschärfe**: Anisotropie des Strukturtensors (gerichtete Unschärfe inkl. Richtung).
 * **Lokale Qualität**: Schärfe je Kachel (3×3 bzw. 4×4), Planetenrand ausgeschlossen.
 * **Bildstabilität**: Verschiebung zwischen Frames per Phasenkorrelation; lineare Drift (Nachführung) wird von der Bildunruhe getrennt.
+
+**Deep-Sky** (`frameforge/core/deepsky.py`) – Kriterien wie bei gängigen Subframe-Selektoren:
+
+* **FWHM** der Sterne (Seeing, Fokus) über Momente oberhalb von 20 % des Maximums, analytisch korrigiert (Abweichung < 5 % bei FWHM ≥ 2,5 px).
+* **Exzentrizität** und Richtung (Nachführung, Wind, Verkippung); ab 0,7 wird abgelehnt.
+* **Sternanzahl** (Transparenz) und **Himmelshintergrund** (Mond, Lichtverschmutzung, Wolken); weniger Sterne bei hellerem Hintergrund → Wolken/Dunst.
+* **Bildfeld**: FWHM je Bildbereich (Verkippung, Bildfeldwölbung, Koma).
+* Nebel und großflächige Gradienten werden vor der Sternsuche lokal abgezogen.
+* Session-Hinweis bei steigender FWHM im Verlauf (Fokusdrift).
 
 **Pro Datei / Session** (`frameforge/core/scoring.py`)
 
@@ -76,14 +89,14 @@ Installationspakete stehen unter **Releases** bereit:
 
 ## Bedienung
 
-1. **Ordner öffnen** (oder Dateien/Ordner per Drag & Drop ins Fenster ziehen).
-2. **Objekt** wählen (Planeten, Mond, Sonne, Allgemein) und **Modus**:
+1. Im **Willkommensdialog** oder auf der **Übersicht** das Objekt wählen (Sonne, Mond, Planeten, Deep-Sky, Allgemein) und *Ordner analysieren* bzw. *Video analysieren* klicken – die Analyse startet sofort. Alternativ Dateien/Ordner ins Fenster ziehen.
+2. Der **Modus** (Seite *Analyse* oder Menü *Analyse › Modus*):
    * *Schnell* – bis 200 Frames je Video, reduzierte Auflösung
    * *Standard* – bis 1000 Frames je Video
    * *Vollständig* – jeder Frame in voller Auflösung
-3. **Analyse starten** – die Tabelle zeigt Rang, Score, Urteil und Teil-Scores (sortierbar).
-4. Rechts: **Bewertung** (Begründung & Empfehlungen), **Qualitätsverlauf** (mehrere Dateien markieren = Session-Vergleich), **Vorschau** (bester Frame + lokale Qualitätskarte), **Frame-Selektion** (Export als SER/CSV), **Session** (Gesamtübersicht).
-5. **Bericht exportieren** als CSV (Excel-kompatibel, `;`-getrennt) oder JSON.
+3. **Übersicht**: Ergebnis-Dashboard mit Empfehlungsquote, Ø-Score, Top-Ergebnissen, Details, Ausschluss-Gründen, Empfehlungen und Vorschau. Doppelklick auf eine Datei öffnet sie in der Analyse.
+4. **Analyse**: vollständige Tabelle (sortierbar) und je Datei **Bewertung**, **Qualitätsverlauf** (mehrere Dateien markieren = Session-Vergleich), **Vorschau** (bester Frame, Zoom, lokale Qualitätskarte) und **Frame-Selektion** (Export als SER/CSV).
+5. **Berichte**: Export als CSV (Excel-kompatibel, `;`-getrennt) oder JSON, Projekt speichern/öffnen, Session-Zusammenfassung.
 
 ### Kommandozeile
 
@@ -111,12 +124,15 @@ python -m frameforge      # GUI starten
 frameforge/
   core/            Analyse ohne GUI-Abhängigkeit
     io/            Reader: ser.py, video.py, fits.py, tiff.py, raw.py, image.py, registry.py
-    metrics.py     Frame-Metriken
-    profiles.py    Objektprofile (Sonne, Mond, Planeten, Allgemein)
+    metrics.py     Frame-Metriken (Sonne, Mond, Planeten)
+    deepsky.py     Stern-Metriken (FWHM, Exzentrizität, Sternanzahl, Hintergrund)
+    project.py     Projekte (.ffproj) speichern/laden
+    profiles.py    Objektprofile (Sonne, Mond, Planeten, Deep-Sky, Allgemein)
     scoring.py     Scores, Urteile, Begründungen, Empfehlungen
     analyzer.py    Datei-/Session-Analyse (Thread-Pool, Stichproben, Abbruch)
     export.py      CSV/JSON-Berichte, SER-Export der besten Frames
-  gui/             PySide6-Oberfläche (Splash, Hauptfenster, Einstellungen, Widgets)
+  gui/             PySide6-Oberfläche: app.py (Splash), welcome.py (Start-Popup), main_window.py,
+                   dashboard.py (Übersicht), pages.py (Berichte, Info), settings_page.py, components.py, icons.py
   updater.py       Update-Prüfung, Download mit SHA-256-Prüfung, Installation
   cli.py           Kommandozeile
 packaging/         PyInstaller-Spec, Icons, Inno-Setup-Skript (Windows), DMG-Skript (macOS)

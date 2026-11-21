@@ -34,7 +34,7 @@ COMPONENT_LABELS = {
 
 VERDICT_RECOMMENDED = "Empfohlen"
 VERDICT_CONDITIONAL = "Bedingt geeignet"
-VERDICT_REJECT = "Nicht empfohlen"
+VERDICT_REJECT = "Abgelehnt"
 VERDICT_ERROR = "Fehler"
 
 
@@ -55,6 +55,13 @@ class Assessment:
     potential: str = "mittel"
     reasons: list[Reason] = field(default_factory=list)
     recommendations: list[str] = field(default_factory=list)
+    summary: str = ""
+
+
+def component_label(key: str, profile: Profile | None = None) -> str:
+    if profile is not None and key in profile.labels:
+        return profile.labels[key]
+    return COMPONENT_LABELS[key]
 
 
 # ---------------------------------------------------------------------------
@@ -73,8 +80,19 @@ def combined_sharpness(sharpness, tenengrad):
     return np.power(np.maximum(sharpness, 0), 0.75) * np.power(np.maximum(tenengrad, 0), 0.25)
 
 
-def frame_quality(arrays: dict[str, np.ndarray]) -> np.ndarray:
+def frame_quality(arrays: dict[str, np.ndarray], profile_key: str = "planet") -> np.ndarray:
     """Quality 0..100 per frame relative to the best frames of the same file."""
+    if profile_key == "deepsky":
+        fwhm = arrays["fwhm"]
+        best = np.nanpercentile(fwhm, 1) if np.isfinite(fwhm).any() else 1.0
+        s = np.where(np.isfinite(fwhm), np.clip(best / np.where(fwhm > 0, fwhm, np.inf), 0, 1), 0)
+        stars = arrays["star_count"]
+        t = np.clip(stars / _robust_top(stars), 0, 1)
+        ecc = np.nan_to_num(arrays["eccentricity"], nan=1.0)
+        e = np.clip((0.75 - ecc) / 0.35, 0, 1)
+        q = 0.55 * s + 0.25 * t + 0.20 * e
+        q = q * np.where(arrays["low_signal"] > 0, 0.1, 1.0)
+        return np.clip(q * 100.0, 0, 100).astype(np.float32)
     sharp = combined_sharpness(arrays["sharpness"], arrays["tenengrad"])
     s = np.clip(sharp / _robust_top(sharp), 0, 1.2)
     c = np.clip(arrays["contrast"] / _robust_top(arrays["contrast"]), 0, 1.2)
@@ -161,8 +179,208 @@ def _num(x: float, digits: int = 1) -> str:
     return f"{x:.{digits}f}".replace(".", ",")
 
 
+_PHRASES = {
+    # key: (good, bad)
+    "sharpness": ("sehr gute Schärfe", "unscharf"),
+    "local": ("gleichmäßige Schärfe im Feld", "ungleichmäßige Schärfe"),
+    "contrast": ("guter Kontrast", "geringer Kontrast"),
+    "noise": ("niedriges Rauschen", "starkes Rauschen"),
+    "exposure": ("gute Belichtung", "Belichtungsproblem"),
+    "stability": ("stabile Bildlage", "Bildunruhe"),
+    "motion": ("keine Bewegungsunschärfe", "Bewegungsunschärfe"),
+}
+_PHRASES_DEEPSKY = {
+    "sharpness": ("kleine FWHM", "große FWHM (unscharf)"),
+    "local": ("gleichmäßiges Bildfeld", "ungleichmäßiges Bildfeld"),
+    "contrast": ("gute Transparenz", "wenige Sterne (Wolken/Dunst?)"),
+    "noise": ("niedriges Rauschen", "heller Hintergrund / Rauschen"),
+    "exposure": ("gute Belichtung", "Belichtungsproblem"),
+    "stability": ("stabile Bildlage", "Bildunruhe"),
+    "motion": ("runde Sterne", "gestreckte Sterne"),
+}
+
+
+def short_summary(components: dict, verdict: str, profile: Profile, agg: dict | None = None) -> str:
+    """One-line justification for tables (e.g. "Sehr gute Schärfe, niedriges Rauschen")."""
+    phrases = _PHRASES_DEEPSKY if profile.key == "deepsky" else _PHRASES
+    avail = [(k, v) for k, v in components.items() if v is not None and k in phrases]
+    if not avail:
+        return ""
+    weights = profile.weights
+    good = sorted((kv for kv in avail if kv[1] >= 65), key=lambda kv: -(kv[1] * weights.get(kv[0], 0.1)))
+    bad = sorted((kv for kv in avail if kv[1] < 40), key=lambda kv: kv[1] - 100 * weights.get(kv[0], 0.1))
+
+    def phrase(k, good_side):
+        text = phrases[k][0 if good_side else 1]
+        if k == "exposure" and not good_side and agg:
+            lo, _ = profile.exposure_target
+            if agg.get("clip_high", 0) > profile.clip_tolerance:
+                text = "überbelichtet"
+            elif agg.get("peak", 1) < lo and profile.key != "deepsky":
+                text = "unterbelichtet"
+        return text
+
+    if verdict == VERDICT_RECOMMENDED:
+        parts = [phrase(k, True) for k, _ in good[:2]] or ["solide Gesamtqualität"]
+    elif verdict == VERDICT_REJECT:
+        parts = [phrase(k, False) for k, _ in bad[:2]] or ["geringes Verarbeitungspotenzial"]
+    else:
+        parts = [phrase(k, True) for k, _ in good[:1]] + [phrase(k, False) for k, _ in bad[:1]]
+        parts = parts or ["durchschnittliche Qualität"]
+    text = ", ".join(parts)
+    return text[:1].upper() + text[1:]
+
+
 def assess_session(aggregates: list[dict], profile: Profile) -> list[Assessment]:
     """Score all files of a session against each other."""
+    if profile.key == "deepsky":
+        results = _assess_deepsky(aggregates, profile)
+    else:
+        results = _assess_surface(aggregates, profile)
+    for a, agg in zip(results, aggregates):
+        if agg is not None:
+            a.summary = short_summary(a.components, a.verdict, profile, agg)
+    return results
+
+
+def _total(comp: dict, profile: Profile) -> float:
+    weights = profile.weights
+    num = sum(weights[k] * v for k, v in comp.items() if v is not None and k in weights)
+    den = sum(weights[k] for k, v in comp.items() if v is not None and k in weights)
+    return num / den if den else 0.0
+
+
+def _assess_deepsky(aggregates: list[dict], profile: Profile) -> list[Assessment]:
+    valid = [a for a in aggregates if a is not None and a.get("star_count", 0) >= 3]
+    n = len(valid)
+
+    def median_of(key: str) -> float:
+        vals = [a[key] for a in valid if a.get(key) is not None and np.isfinite(a[key]) and a[key] > 0]
+        return float(np.median(vals)) if vals else 0.0
+
+    med_fwhm, med_stars = median_of("fwhm"), median_of("star_count")
+    med_bg, med_snr, med_unif = median_of("background"), median_of("snr"), median_of("uniformity")
+    results: list[Assessment] = []
+    for agg in aggregates:
+        if agg is None:
+            results.append(Assessment(score=0.0, verdict=VERDICT_ERROR, potential="–"))
+            continue
+        comp: dict[str, float | None] = {}
+        reasons: list[Reason] = []
+        recs: list[str] = []
+        stars = agg.get("star_count", 0)
+        if stars < 3:
+            reasons.append(Reason("minus", "Kaum oder keine Sterne erkannt (Wolken, Tau, Fokus verloren oder falsches Profil?)."))
+            recs.append("Aussortieren – ohne messbare Sterne ist die Aufnahme für die Integration unbrauchbar.")
+            results.append(Assessment(components={k: None for k in COMPONENT_LABELS}, score=0.0,
+                                      verdict=VERDICT_REJECT, potential="gering", reasons=reasons, recommendations=recs))
+            continue
+        compare = n >= 2
+        fwhm, ecc = agg["fwhm"], agg["eccentricity"]
+
+        # Sharpness (FWHM) --------------------------------------------------
+        if compare and med_fwhm:
+            comp["sharpness"] = _relative(fwhm, med_fwhm, 0.3, higher_is_better=False)
+            rel = (fwhm / med_fwhm - 1) * 100
+            if rel <= -5:
+                reasons.append(Reason("plus", f"FWHM {_num(fwhm, 2)} px – {_num(-rel, 0)} % kleiner als der Session-Median."))
+            elif rel >= 5:
+                reasons.append(Reason("minus", f"FWHM {_num(fwhm, 2)} px – {_num(rel, 0)} % größer als der Session-Median "
+                                               "(Seeing, Fokus?)."))
+                if rel >= 20:
+                    recs.append("Deutlich größere Sterne: Fokus prüfen (Temperaturdrift) bzw. Autofokus-Intervall verkürzen.")
+            else:
+                reasons.append(Reason("info", f"FWHM {_num(fwhm, 2)} px – im Bereich des Session-Medians."))
+        else:
+            comp["sharpness"] = None
+            reasons.append(Reason("info", f"FWHM {_num(fwhm, 2)} px – ohne Vergleichsaufnahmen nicht bewertbar "
+                                          "(abhängig von Brennweite und Pixelgröße)."))
+
+        # Field uniformity --------------------------------------------------
+        unif = agg["uniformity"]
+        comp["local"] = 0.5 * 100 * unif + 0.5 * _relative(unif, med_unif, 0.15) if compare and med_unif else 100 * unif
+        if unif < 0.75:
+            reasons.append(Reason("minus", "Sterngröße variiert stark über das Bildfeld (Verkippung, Bildfeldwölbung, Koma?)."))
+            recs.append("Ungleichmäßiges Bildfeld: Sensorverkippung, Backfocus/Flattener-Abstand prüfen.")
+
+        # Transparency (star count) --------------------------------------
+        if compare and med_stars:
+            comp["contrast"] = _relative(stars, med_stars, 0.3)
+            ratio = stars / med_stars
+            if ratio < 0.7:
+                reasons.append(Reason("minus", f"Nur {stars} Sterne erkannt ({_num((1 - ratio) * 100, 0)} % weniger als üblich) "
+                                               "– Wolken, Dunst oder Tau?"))
+            else:
+                reasons.append(Reason("plus" if ratio >= 0.95 else "info", f"{stars} Sterne erkannt."))
+        else:
+            comp["contrast"] = None
+            reasons.append(Reason("info", f"{stars} Sterne erkannt."))
+
+        # Noise / background ---------------------------------------------
+        bg = agg["background"]
+        abs_noise = 100.0 * (1.0 - math.exp(-agg["snr"] / 30.0))
+        if compare and med_bg:
+            comp["noise"] = 0.5 * _relative(agg["snr"], med_snr, 0.4) + 0.5 * _relative(bg, med_bg, 0.3, False)
+            if bg > 1.3 * med_bg:
+                reasons.append(Reason("minus", f"Himmelshintergrund {_num((bg / med_bg - 1) * 100, 0)} % heller als der Median "
+                                               "(Mond, Lichtverschmutzung, Dämmerung, Wolken?)."))
+                recs.append("Subs mit deutlich hellerem Hintergrund nur verwenden, wenn genug Material vorhanden ist; "
+                            "Gradientenentfernung einplanen.")
+        else:
+            comp["noise"] = abs_noise
+        reasons.append(Reason("info", f"Stern-SNR (Median) ≈ {_num(agg['snr'], 0)}, Hintergrund {_pct(bg)}."))
+
+        # Exposure ------------------------------------------------------
+        lo, hi = profile.exposure_target
+        exp = 100.0
+        if bg < lo:
+            exp = 100.0 * max(bg, 0.0) / lo
+            reasons.append(Reason("minus", f"Hintergrund sehr dunkel ({_pct(bg)}) – Signal nahe am Ausleserauschen."))
+            recs.append("Belichtungszeit oder Gain erhöhen, sodass der Hintergrund deutlich vom linken Histogrammrand abrückt.")
+        elif bg > hi:
+            exp = max(0.0, 100.0 - 200.0 * (bg - hi))
+            reasons.append(Reason("minus", f"Hintergrund sehr hell ({_pct(bg)}) – Dynamikumfang geht verloren."))
+        if agg["clip_low"] > 0.01:
+            exp -= min(40.0, 400.0 * agg["clip_low"])
+            reasons.append(Reason("minus", f"{_pct(agg['clip_low'])} der Pixel abgeschnitten (schwarz) – Offset zu niedrig?"))
+        if agg["clip_high"] > profile.clip_tolerance:
+            exp -= min(30.0, 3000.0 * (agg["clip_high"] - profile.clip_tolerance))
+            reasons.append(Reason("info", f"{_pct(agg['clip_high'])} der Pixel gesättigt (helle Sterne/Kerne)."))
+        comp["exposure"] = max(0.0, exp)
+
+        # Stability (only for cubes/videos) ------------------------------
+        comp["stability"] = _stability_score(agg, profile) if agg["is_video"] else None
+
+        # Tracking (eccentricity) ----------------------------------------
+        comp["motion"] = 100.0 * float(np.clip((0.7 - ecc) / 0.3, 0.0, 1.0))
+        if ecc >= 0.55:
+            reasons.append(Reason("minus", f"Gestreckte Sterne (Exzentrizität {_num(ecc, 2)}, Richtung ≈ {agg['blur_angle']:.0f}°)."))
+            recs.append("Gestreckte Sterne: Nachführung/Guiding, Ausbalancierung, Wind und Kabelzug prüfen.")
+        else:
+            reasons.append(Reason("plus", f"Runde Sterne (Exzentrizität {_num(ecc, 2)})."))
+
+        score = _total(comp, profile)
+        verdict = VERDICT_RECOMMENDED if score >= 65 else VERDICT_CONDITIONAL if score >= 45 else VERDICT_REJECT
+        if ecc >= 0.7:
+            verdict = VERDICT_REJECT
+        if compare and med_stars and stars < 0.5 * med_stars:
+            verdict = VERDICT_REJECT
+            reasons.append(Reason("minus", "Weniger als die Hälfte der üblichen Sterne – Transparenz stark reduziert."))
+        elif compare and med_stars and med_bg and stars < 0.75 * med_stars and bg > 1.5 * med_bg:
+            verdict = VERDICT_REJECT
+            reasons.append(Reason("minus", "Weniger Sterne bei deutlich hellerem Hintergrund – typisch für Wolken oder Dunst."))
+        if compare and med_fwhm and fwhm >= 1.35 * med_fwhm:
+            verdict = VERDICT_REJECT
+            reasons.append(Reason("minus", "FWHM mehr als 35 % über dem Median – würde das Integrationsergebnis verschlechtern."))
+        potential = "hoch" if score >= 70 else "mittel" if score >= 50 else "gering"
+        if verdict == VERDICT_REJECT:
+            recs.insert(0, "Nicht in die Integration aufnehmen.")
+        results.append(Assessment(components=comp, score=round(float(score), 1), verdict=verdict,
+                                  potential=potential, reasons=reasons, recommendations=recs))
+    return results
+
+
+def _assess_surface(aggregates: list[dict], profile: Profile) -> list[Assessment]:
     valid = [a for a in aggregates if a is not None]
     n = len(valid)
 
@@ -285,11 +503,7 @@ def assess_session(aggregates: list[dict], profile: Profile) -> list[Assessment]
                 "abhängig von Brennweite und Planet."
             )
 
-        # Total ------------------------------------------------------------
-        weights = profile.weights
-        num = sum(weights[k] * v for k, v in comp.items() if v is not None and k in weights)
-        den = sum(weights[k] for k, v in comp.items() if v is not None and k in weights)
-        score = num / den if den else 0.0
+        score = _total(comp, profile)
 
         verdict = VERDICT_RECOMMENDED if score >= 65 else VERDICT_CONDITIONAL if score >= 45 else VERDICT_REJECT
         if profile.object_must_be_complete and agg["edge_fraction"] > 0.5:
@@ -325,17 +539,26 @@ def session_recommendations(files: list, profile: Profile) -> list[str]:
     good = [f for f in ok if f.verdict == VERDICT_RECOMMENDED]
     reject = [f for f in ok if f.verdict == VERDICT_REJECT]
     recs.append(f"{len(good)} von {len(ok)} Dateien empfohlen, {len(reject)} zum Aussortieren vorgeschlagen.")
-    if len(ok) >= 2:
-        videos = [f for f in ok if f.info.is_video and f.timeline_start is not None]
-        if len(videos) >= 3:
-            ordered = sorted(videos, key=lambda f: f.timeline_start)
-            third = max(1, len(ordered) // 3)
-            first = np.mean([f.score for f in ordered[:third]])
-            last = np.mean([f.score for f in ordered[-third:]])
-            if last - first > 10:
-                recs.append("Die Qualität hat im Verlauf der Session zugenommen (Seeing/Objekthöhe besser).")
-            elif first - last > 10:
-                recs.append("Die Qualität hat im Verlauf der Session abgenommen (Seeing, sinkende Objekthöhe, Taubeschlag?).")
+    if profile.key == "deepsky" and good:
+        recs.append(f"Für die Integration die {len(good)} empfohlenen Subs verwenden"
+                    + (", bedingt geeignete nur bei Bedarf ergänzen." if len(good) < len(ok) else "."))
+    timed = [f for f in ok if f.timeline_start is not None]
+    if len(timed) >= 3:
+        ordered = sorted(timed, key=lambda f: f.timeline_start)
+        third = max(1, len(ordered) // 3)
+        first = np.mean([f.score for f in ordered[:third]])
+        last = np.mean([f.score for f in ordered[-third:]])
+        if last - first > 10:
+            recs.append("Die Qualität hat im Verlauf der Session zugenommen (Seeing/Objekthöhe besser).")
+        elif first - last > 10:
+            recs.append("Die Qualität hat im Verlauf der Session abgenommen (Seeing, sinkende Objekthöhe, Taubeschlag?).")
+        if profile.key == "deepsky":
+            fw = [f.aggregate.get("fwhm") for f in ordered]
+            if all(v and np.isfinite(v) for v in fw):
+                a, b = np.mean(fw[:third]), np.mean(fw[-third:])
+                if b > 1.15 * a:
+                    recs.append(f"Die FWHM ist im Verlauf um {(b / a - 1) * 100:.0f} % gestiegen – möglicher Fokusdrift "
+                                "(Temperatur): regelmäßig nachfokussieren.")
     if len(ok) == 1:
         recs.append("Hinweis: Für ein aussagekräftiges Ranking mehrere Aufnahmen derselben Session gemeinsam analysieren.")
     return recs

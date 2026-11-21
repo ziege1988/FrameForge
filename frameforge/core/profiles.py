@@ -27,6 +27,10 @@ class Profile:
     object_must_be_complete: bool = False
     #: Recommended maximum capture length in seconds (planet rotation), None = no limit
     max_capture_s: float | None = None
+    #: Profile specific names of score components (e.g. "Nachführung" for deep-sky)
+    labels: dict[str, str] = field(default_factory=dict)
+    #: Short name of the analysed unit in texts
+    unit: str = "Frames"
 
 
 PROFILES: dict[str, Profile] = {
@@ -88,6 +92,36 @@ PROFILES: dict[str, Profile] = {
             "stability": 0.06,
             "motion": 0.06,
         },
+    ),
+    "deepsky": Profile(
+        key="deepsky",
+        name="Deep-Sky",
+        description="Einzelbelichtungen (Subs/Lights) von Nebeln, Galaxien, Sternhaufen. "
+                    "Bewertet werden Sternform (FWHM, Elongation), Sternanzahl, Himmelshintergrund und Rauschen.",
+        roi_mode="auto",
+        denoise_sigma=1.0,
+        grid=3,
+        exposure_target=(0.02, 0.35),  # target range of the sky background
+        clip_tolerance=0.002,
+        weights={
+            "sharpness": 0.28,
+            "local": 0.08,
+            "contrast": 0.16,
+            "noise": 0.16,
+            "exposure": 0.08,
+            "stability": 0.04,
+            "motion": 0.20,
+        },
+        labels={
+            "sharpness": "Schärfe (FWHM)",
+            "local": "Bildfeld",
+            "contrast": "Transparenz",
+            "noise": "Rauschen / Hintergrund",
+            "exposure": "Belichtung",
+            "stability": "Bildstabilität",
+            "motion": "Nachführung",
+        },
+        unit="Subs",
     ),
     "general": Profile(
         key="general",

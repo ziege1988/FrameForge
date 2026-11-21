@@ -16,38 +16,70 @@ def app():
     return a
 
 
-def test_main_window_analysis(app, tmp_path):
-    from frameforge.gui.main_window import MainWindow
+@pytest.fixture
+def settings(tmp_path):
     from frameforge.gui.settings import Settings
+    return Settings(QSettings(str(tmp_path / "s.ini"), QSettings.IniFormat))
+
+
+def _run(app, w):
+    w.worker.wait(60000)
+    for _ in range(3):
+        app.processEvents()
+
+
+def test_main_window_analysis_dashboard_and_project(app, tmp_path, settings):
+    from frameforge.gui.main_window import PAGE_OVERVIEW, MainWindow
 
     planet_video(tmp_path / "a.ser", n=15, base_blur=0.3, seed=1)
     planet_video(tmp_path / "b.ser", n=15, base_blur=2.5, seed=2)
-    settings = Settings(QSettings(str(tmp_path / "s.ini"), QSettings.IniFormat))
     w = MainWindow(settings)
-    w.add_paths([tmp_path])
-    assert len(w.queue) == 2
-    w.start_analysis()
-    w.worker.wait(60000)
-    app.processEvents()
-    app.processEvents()
+    w.open_paths([tmp_path], replace=True)
+    assert w.pages.currentIndex() == PAGE_OVERVIEW
+    _run(app, w)
     assert w.session is not None and w.session.ranked()[0].path.name == "a.ser"
+    # Dashboard filled
+    assert w.overview.stack.currentIndex() == 2
+    assert w.overview.details.rowCount() == 2
+    assert "von 2 Dateien empfohlen" in w.overview.head_sub.text()
+    # Session comparison in the analysis page
     w.table.selectAll()
     app.processEvents()
     assert len(w.plot._series) == 2
+    # Project roundtrip through the GUI
+    from frameforge.core.project import save_project
+    proj = save_project(w.session, tmp_path / "p.ffproj", w.queue)
+    w.clear_queue()
+    assert w.overview.stack.currentIndex() == 0
+    w.load_project_file(proj)
+    assert w.session is not None and len(w.queue) == 2
     w.close()
 
 
-def test_splash_and_settings_dialog(app, tmp_path):
-    from frameforge.gui.app import _splash_pixmap
-    from frameforge.gui.settings import Settings
-    from frameforge.gui.settings_dialog import SettingsDialog
+def test_profile_sync_and_update_badge(app, settings):
+    from frameforge.gui.main_window import PAGE_SETTINGS, MainWindow
     from frameforge.updater import Asset, ReleaseInfo
 
-    assert not _splash_pixmap(1.0).isNull()
+    w = MainWindow(settings)
+    w._set_profile("deepsky")
+    assert settings.get("analysis/profile") == "deepsky"
+    assert w.profile_box.currentData() == "deepsky"
+    assert w.settings_page.profile.currentData() == "deepsky"
     rel = ReleaseInfo("9.0.0", "v9.0.0", "", "Notes", "2026-01-01", "", False,
                       [Asset("FrameForge-9.0.0-windows-x64-setup.exe", "u", 1)])
-    s = Settings(QSettings(str(tmp_path / "s.ini"), QSettings.IniFormat))
-    d = SettingsDialog(s, open_updates=True, release=rel)
-    assert d.release_box.isVisibleTo(d)
-    d._save()
-    assert s.get("updates/check_on_start") is True
+    w._on_update_result(rel)
+    assert "●" in w.nav_buttons[PAGE_SETTINGS].text()
+    assert w.settings_page.release_box.isVisibleTo(w.settings_page)
+    w.close()
+
+
+def test_splash_and_welcome(app, settings):
+    from frameforge.gui.app import _splash_pixmap
+    from frameforge.gui.welcome import WelcomeDialog
+
+    assert not _splash_pixmap(1.0).isNull()
+    d = WelcomeDialog(settings)
+    d.dont_show.setChecked(True)
+    d._choose("folder")
+    assert d.choice == "folder"
+    assert settings.get("ui/show_welcome") is False

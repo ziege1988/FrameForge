@@ -18,6 +18,7 @@ DEFAULTS = {
     "updates/last_check": "",
     "updates/skipped_version": "",
     "ui/last_dir": "",
+    "ui/show_welcome": True,
     "ui/geometry": None,
     "ui/state": None,
 }

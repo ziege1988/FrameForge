@@ -104,3 +104,18 @@ def test_export_from_sampled_analysis_runs_full_analysis(tmp_path):
     assert r.sampled and r.analyzed_frames == 200
     dest, n = export_best_frames(r, tmp_path / "best.ser", fraction=0.1)
     assert n == 26
+
+
+def test_project_roundtrip(tmp_path, session_dir):
+    from frameforge.core.project import load_project, save_project
+
+    s = analyze_session([session_dir], AnalysisOptions())
+    p = save_project(s, tmp_path / "session")
+    assert p.suffix == ".ffproj"
+    loaded, queue = load_project(p)
+    assert [f.path.name for f in loaded.ranked()] == [f.path.name for f in s.ranked()]
+    a, b = s.ranked()[0], loaded.ranked()[0]
+    assert np.array_equal(a.quality, b.quality) and np.array_equal(a.preview, b.preview)
+    assert a.summary == b.summary and a.reasons[0].text == b.reasons[0].text
+    assert b.best_frame_indices().size == a.best_frame_indices().size
+    assert loaded.elapsed_s == pytest.approx(s.elapsed_s)
