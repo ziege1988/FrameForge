@@ -1,0 +1,95 @@
+name: Release
+
+# Creates installers for Windows and macOS and publishes a GitHub release.
+# Trigger: push a tag, e.g.  git tag v0.2.0 && git push origin v0.2.0
+# The tag must match frameforge/__init__.py (__version__).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: windows-x64
+          - os: macos-14          # Apple Silicon
+            target: macos-arm64
+          - os: macos-15-intel    # Intel Macs
+            target: macos-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[build,dev]"
+      - name: Version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(python -c "import frameforge; print(frameforge.__version__)")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME#v}" != "$VERSION" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} passt nicht zu __version__ $VERSION"; exit 1
+          fi
+      - name: Tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: pytest -q
+      - name: Icons
+        run: python packaging/make_icons.py
+      - name: PyInstaller
+        run: pyinstaller --noconfirm --clean packaging/frameforge.spec
+      - name: Windows installer (Inno Setup)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) {
+            $default = "${env:ProgramFiles(x86)}\Inno Setup 6"
+            if (-not (Test-Path "$default\ISCC.exe")) { choco install innosetup -y --no-progress }
+            $env:Path += ";$default"
+          }
+          iscc /DAppVersion=${{ steps.version.outputs.version }} packaging\windows\installer.iss
+      - name: macOS DMG
+        if: runner.os == 'macOS'
+        run: packaging/macos/build_dmg.sh "${{ steps.version.outputs.version }}" "${{ matrix.target == 'macos-arm64' && 'arm64' || 'x86_64' }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Checksums
+        run: |
+          cd assets
+          ls -la
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: assets/*
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}

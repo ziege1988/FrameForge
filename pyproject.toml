@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "frameforge"
+dynamic = ["version"]
+description = "Astrophotography Quality Analyzer – Qualitätsanalyse und Frame-Selektion für Sonne, Mond und Planeten"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "opencv-python-headless>=4.8",
+    "tifffile>=2023.7.10",
+    "imagecodecs>=2023.3.16",
+    "rawpy>=0.19",
+    "PySide6-Essentials>=6.6",
+    "certifi",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "astropy>=5.3"]
+fits-compressed = ["astropy>=5.3"]
+build = ["pyinstaller>=6.5", "pillow>=10"]
+
+[project.scripts]
+frameforge = "frameforge.cli:main"
+
+[project.gui-scripts]
+frameforge-gui = "frameforge.gui.app:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "frameforge.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["frameforge*"]
+
+[tool.setuptools.package-data]
+frameforge = ["resources/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
