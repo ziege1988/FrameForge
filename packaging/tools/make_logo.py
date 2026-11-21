@@ -48,14 +48,10 @@ def halo_rings() -> str:
              f'<circle cx="{CX}" cy="{CY}" r="150" fill="url(#haloTint)"/>']
     # fine circular streaks for texture
     rnd = random.Random(7)
-    for i in range(60):
+    for _ in range(60):
         r = rnd.uniform(74, 150)
-        if i % 5 == 0:  # a few short, faint arcs below the hole (lower lensed image)
-            r = rnd.uniform(74, 112)
-            start, span = rnd.uniform(30, 110), rnd.uniform(20, 50)
-        else:  # most arcs stay in the upper half (angles 180°…360° in screen coordinates)
-            start = rnd.uniform(170, 330)
-            span = min(rnd.uniform(25, 140), 370 - start)
+        start = rnd.uniform(0, 360)
+        span = rnd.uniform(25, 140)
         a0, a1 = math.radians(start), math.radians(start + span)
         mid = math.radians(start + span / 2)
         below_factor = 0.22 if math.sin(mid) > 0.2 else 1.0  # arcs below the hole are fainter
