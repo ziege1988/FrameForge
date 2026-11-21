@@ -23,7 +23,9 @@ class RawSource(FrameSource):
 
         self.path = Path(path)
         try:
-            with rawpy.imread(str(self.path)) as raw:
+            # Pass a file object: LibRaw then reads from memory, which also works
+            # for paths with umlauts/non-ASCII characters on Windows.
+            with open(self.path, "rb") as fh, rawpy.imread(fh) as raw:
                 mosaic = raw.raw_image_visible.astype(np.float32)
                 black = float(np.mean(raw.black_level_per_channel))
                 white = float(raw.white_level or mosaic.max() or 1.0)

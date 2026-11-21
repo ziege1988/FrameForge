@@ -3,17 +3,8 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QSettings  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from synthetic import planet_video  # noqa: E402
-
-
-@pytest.fixture(scope="module")
-def app():
-    from frameforge.gui.theme import apply_theme
-    a = QApplication.instance() or QApplication([])
-    apply_theme(a)
-    return a
 
 
 @pytest.fixture
@@ -28,12 +19,12 @@ def _run(app, w):
         app.processEvents()
 
 
-def test_main_window_analysis_dashboard_and_project(app, tmp_path, settings):
-    from frameforge.gui.main_window import PAGE_OVERVIEW, MainWindow
+def test_main_window_analysis_dashboard_and_project(app, tmp_path, settings, window_factory):
+    from frameforge.gui.main_window import PAGE_OVERVIEW
 
     planet_video(tmp_path / "a.ser", n=15, base_blur=0.3, seed=1)
     planet_video(tmp_path / "b.ser", n=15, base_blur=2.5, seed=2)
-    w = MainWindow(settings)
+    w = window_factory(settings)
     w.open_paths([tmp_path], replace=True)
     assert w.pages.currentIndex() == PAGE_OVERVIEW
     _run(app, w)
@@ -53,14 +44,13 @@ def test_main_window_analysis_dashboard_and_project(app, tmp_path, settings):
     assert w.overview.stack.currentIndex() == 0
     w.load_project_file(proj)
     assert w.session is not None and len(w.queue) == 2
-    w.close()
 
 
-def test_profile_sync_and_update_badge(app, settings):
-    from frameforge.gui.main_window import PAGE_SETTINGS, MainWindow
+def test_profile_sync_and_update_badge(app, settings, window_factory):
+    from frameforge.gui.main_window import PAGE_SETTINGS
     from frameforge.updater import Asset, ReleaseInfo
 
-    w = MainWindow(settings)
+    w = window_factory(settings)
     w._set_profile("deepsky")
     assert settings.get("analysis/profile") == "deepsky"
     assert w.profile_box.currentData() == "deepsky"
@@ -70,7 +60,6 @@ def test_profile_sync_and_update_badge(app, settings):
     w._on_update_result(rel)
     assert "●" in w.nav_buttons[PAGE_SETTINGS].text()
     assert w.settings_page.release_box.isVisibleTo(w.settings_page)
-    w.close()
 
 
 def test_splash_and_welcome(app, settings):
@@ -81,5 +70,18 @@ def test_splash_and_welcome(app, settings):
     d = WelcomeDialog(settings)
     d.dont_show.setChecked(True)
     d._choose("folder")
+    d.deleteLater()
     assert d.choice == "folder"
     assert settings.get("ui/show_welcome") is False
+
+
+def test_open_external_project_and_crash_reporter(app, tmp_path, settings, window_factory):
+    from frameforge.core.analyzer import AnalysisOptions, analyze_session
+    from frameforge.core.project import save_project
+    from frameforge.gui.crash import CrashReporter
+    planet_video(tmp_path / "a.ser", n=10)
+    proj = save_project(analyze_session([tmp_path], AnalysisOptions()), tmp_path / "x.ffproj")
+    w = window_factory(settings)
+    w.open_external([str(proj)])
+    assert w.session is not None and w.worker is None
+    assert CrashReporter() is not None

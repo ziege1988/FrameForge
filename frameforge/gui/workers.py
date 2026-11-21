@@ -11,6 +11,7 @@ from .. import UPDATE_REPOSITORY, __version__
 from ..core.analyzer import AnalysisOptions, FileResult, analyze_session
 from ..core.export import export_best_frames
 from .. import updater
+from ..logs import log
 
 
 class AnalysisWorker(QThread):
@@ -34,6 +35,7 @@ class AnalysisWorker(QThread):
                                       self.fileDone.emit)
             self.finishedSession.emit(session)
         except Exception:  # pragma: no cover - safety net
+            log.exception("Analyse fehlgeschlagen")
             self.failed.emit(traceback.format_exc())
 
 
@@ -73,8 +75,10 @@ class UpdateCheckWorker(QThread):
         try:
             self.result.emit(updater.check_for_update(__version__, UPDATE_REPOSITORY, self.include_prerelease))
         except updater.UpdateError as exc:
+            log.info("Update-Prüfung: %s", exc)
             self.failed.emit(str(exc))
         except Exception as exc:  # pragma: no cover
+            log.exception("Update-Prüfung fehlgeschlagen")
             self.failed.emit(f"Unerwarteter Fehler: {exc}")
 
 
@@ -96,6 +100,8 @@ class DownloadWorker(QThread):
             path = updater.download_update(self.release, progress=self.progress.emit, cancel=self.cancel_event)
             self.done.emit(str(path))
         except updater.UpdateError as exc:
+            log.warning("Update-Download: %s", exc)
             self.failed.emit(str(exc))
         except Exception as exc:  # pragma: no cover
+            log.exception("Update-Download fehlgeschlagen")
             self.failed.emit(f"Unerwarteter Fehler: {exc}")

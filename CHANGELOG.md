@@ -17,6 +17,11 @@ Neues Erscheinungsbild und Deep-Sky-Unterstützung.
 - Videos: zusätzlich MP4, MOV, MKV, M4V
 - Urteil „Nicht empfohlen“ heißt jetzt „Abgelehnt“
 - Einstellungen als eigene Seite, Änderungen werden sofort gespeichert
+- Protokolldatei, Fehlerdialog mit „Problem melden“, Hilfe-Menü (Anleitung, Protokollordner)
+- Deutsche Texte in Qt-Standarddialogen
+- Dateizuordnung: Doppelklick auf .ffproj, „Öffnen mit“ für SER/FITS; macOS-Finder-Öffnen
+- Pfade mit Umlauten unter Windows (Videos, RAW)
+- Robustere Release-Pipeline (nur Binärpakete, Zeitlimit, Teil-Releases), Issue-Vorlagen, Dependabot
 
 
 ## 0.1.0 – 2026-11-21

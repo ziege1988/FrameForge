@@ -1,0 +1,7 @@
+# Keeps the GitHub Actions used for builds up to date (free for public repositories).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

@@ -25,6 +25,7 @@ UninstallDisplayIcon={app}\{#AppExe}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+ChangesAssociations=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=yes
@@ -43,6 +44,20 @@ Source: "..\..\dist\FrameForge\*"; DestDir: "{app}"; Flags: ignoreversion recurs
 [InstallDelete]
 ; Remove files of the previous version before copying the new ones
 Type: filesandordirs; Name: "{app}\_internal"
+
+[Registry]
+; Per-user file association for FrameForge projects (no admin rights needed)
+Root: HKCU; Subkey: "Software\Classes\.ffproj"; ValueType: string; ValueName: ""; ValueData: "FrameForge.Project"; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\FrameForge.Project"; ValueType: string; ValueName: ""; ValueData: "FrameForge-Projekt"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\FrameForge.Project\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExe},0"
+Root: HKCU; Subkey: "Software\Classes\FrameForge.Project\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" ""%1"""
+; "Öffnen mit" for astro recordings (does not change the existing default program)
+Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExe}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" ""%1"""; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\FrameForge.Recording"; ValueType: string; ValueName: ""; ValueData: "Astro-Aufnahme"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\FrameForge.Recording\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" ""%1"""
+Root: HKCU; Subkey: "Software\Classes\.ser\OpenWithProgids"; ValueType: string; ValueName: "FrameForge.Recording"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\.fits\OpenWithProgids"; ValueType: string; ValueName: "FrameForge.Recording"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\.fit\OpenWithProgids"; ValueType: string; ValueName: "FrameForge.Recording"; ValueData: ""; Flags: uninsdeletevalue
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"

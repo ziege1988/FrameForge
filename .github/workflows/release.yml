@@ -20,21 +20,23 @@ jobs:
         include:
           - os: windows-latest
             target: windows-x64
-          - os: macos-14          # Apple Silicon
+          - os: macos-latest      # Apple Silicon (arm64)
             target: macos-arm64
           - os: macos-15-intel    # Intel Macs
             target: macos-x86_64
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[build,dev]"
+          pip install --only-binary=:all: -r packaging/requirements-build.txt
+          pip install --no-deps -e .
       - name: Version
         id: version
         shell: bash
@@ -79,11 +81,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
+        continue-on-error: true  # a single failed platform must not block the others
         with:
           path: assets
           merge-multiple: true
       - name: Checksums
         run: |
+          if [ ! -d assets ] || [ -z "$(ls -A assets)" ]; then echo "Keine Installationspakete gebaut"; exit 1; fi
           cd assets
           ls -la
           sha256sum * > SHA256SUMS.txt

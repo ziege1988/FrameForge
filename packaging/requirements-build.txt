@@ -1,0 +1,14 @@
+# Dependencies for release builds. Installed with --only-binary so that a missing
+# wheel for a platform fails fast instead of compiling for hours.
+numpy>=1.24
+opencv-python-headless>=4.8
+tifffile>=2023.7.10
+imagecodecs>=2023.3.16
+rawpy>=0.19
+PySide6-Essentials>=6.6
+certifi
+# build & test tools
+pyinstaller>=6.5
+pillow>=10
+pytest>=7
+astropy>=5.3

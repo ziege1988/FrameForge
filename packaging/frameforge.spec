@@ -64,11 +64,20 @@ if sys.platform == "darwin":
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "11.0",
             "NSHumanReadableCopyright": "FrameForge",
-            "CFBundleDocumentTypes": [{
-                "CFBundleTypeName": "Astro-Aufnahme",
-                "CFBundleTypeRole": "Viewer",
-                "LSHandlerRank": "Alternate",
-                "CFBundleTypeExtensions": ["ser", "avi", "fits", "fit", "fts", "tif", "tiff"],
-            }],
+            "CFBundleDocumentTypes": [
+                {
+                    "CFBundleTypeName": "FrameForge-Projekt",
+                    "CFBundleTypeRole": "Editor",
+                    "LSHandlerRank": "Owner",
+                    "CFBundleTypeExtensions": ["ffproj"],
+                    "CFBundleTypeIconFile": "frameforge.icns",
+                },
+                {
+                    "CFBundleTypeName": "Astro-Aufnahme",
+                    "CFBundleTypeRole": "Viewer",
+                    "LSHandlerRank": "Alternate",
+                    "CFBundleTypeExtensions": ["ser", "avi", "mp4", "mov", "fits", "fit", "fts", "tif", "tiff"],
+                },
+            ],
         },
     )

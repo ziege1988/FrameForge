@@ -7,8 +7,8 @@ from datetime import datetime
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QActionGroup, QColor, QKeySequence
+from PySide6.QtCore import QSize, Qt, QUrl
+from PySide6.QtGui import QActionGroup, QColor, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -35,7 +35,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import APP_NAME, __version__
+from .. import APP_NAME, UPDATE_REPOSITORY, __version__
+from ..logs import log
 from ..core.analyzer import MODE_LABELS, AnalysisOptions, FileResult, SessionResult, stretch_to_uint8
 from ..core.export import export_csv, export_frame_list, export_json
 from ..core.io import open_source
@@ -44,6 +45,7 @@ from ..core.profiles import PROFILES, get_profile
 from ..core.project import PROJECT_EXTENSION, load_project, save_project
 from . import icons
 from .components import Card, ZoomPreview, status_icon
+from .crash import open_log_folder, report_problem
 from .dashboard import OverviewPage
 from .pages import InfoPage, ReportsPage
 from .resources import app_icon
@@ -153,6 +155,12 @@ class MainWindow(QMainWindow):
 
         h = mb.addMenu("Hilfe")
         h.addAction("Willkommensdialog anzeigen", self.show_welcome)
+        h.addSeparator()
+        h.addAction("Anleitung und Projektseite (GitHub)",
+                    lambda: QDesktopServices.openUrl(QUrl(f"https://github.com/{UPDATE_REPOSITORY}#readme")))
+        h.addAction("Problem melden …", lambda: report_problem())
+        h.addAction("Protokollordner öffnen", open_log_folder)
+        h.addSeparator()
         h.addAction(icons.icon("info"), f"Über {APP_NAME}", lambda: self.goto(PAGE_INFO))
 
     def _build_ui(self):
@@ -523,6 +531,17 @@ class MainWindow(QMainWindow):
             self.settings.set("ui/last_dir", str(Path(files[0]).parent))
             self.add_paths([Path(f) for f in files])
 
+    def open_external(self, paths):
+        """Files from the command line, Finder/Explorer ("Öffnen mit") or the Dock icon."""
+        paths = [Path(p) for p in paths]
+        projects = [p for p in paths if p.suffix.lower() == PROJECT_EXTENSION]
+        if projects:
+            self.load_project_file(projects[0])
+        else:
+            self.open_paths(paths, replace=True)
+        self.raise_()
+        self.activateWindow()
+
     def open_paths(self, paths, replace: bool = False):
         """Queue files/folders and start the analysis right away (quick start)."""
         if self.worker and self.worker.isRunning():
@@ -576,6 +595,8 @@ class MainWindow(QMainWindow):
         self.worker.finished.connect(self._update_actions)
         self.progress.setValue(0)
         self.progress.show()
+        opts = self._options()
+        log.info("Analyse gestartet: %d Dateien, Profil %s, Modus %s", len(self.queue), opts.profile, opts.mode)
         self.overview.show_running(len(self.queue))
         self.goto(PAGE_OVERVIEW)
         self.worker.start()
@@ -601,6 +622,10 @@ class MainWindow(QMainWindow):
 
     def _on_session_done(self, session: SessionResult):
         self.progress.hide()
+        for f in session.files:
+            if f.error:
+                log.warning("Datei nicht auswertbar: %s – %s", f.path, f.error)
+        log.info("Analyse beendet in %.1f s (%s)", session.elapsed_s, "abgebrochen" if session.cancelled else "ok")
         n_ok = sum(1 for f in session.files if f.error is None)
         self.status_label.setText(("Analyse abgebrochen – " if session.cancelled else "Analyse abgeschlossen – ")
                                   + f"{n_ok} von {len(self.queue)} Dateien ausgewertet.")
@@ -634,6 +659,7 @@ class MainWindow(QMainWindow):
 
     def _on_failed(self, msg):
         self.progress.hide()
+        log.error("Analyse fehlgeschlagen:\n%s", msg)
         QMessageBox.critical(self, "Fehler", f"Die Analyse ist fehlgeschlagen:\n\n{msg[-1500:]}")
 
     def _update_actions(self):

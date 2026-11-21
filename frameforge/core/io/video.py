@@ -8,6 +8,7 @@ sequentially. Frames that are not requested are skipped with ``grab()``
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import Iterable, Iterator
 
@@ -17,14 +18,47 @@ import numpy as np
 from .base import FrameSource, SourceInfo, UnsupportedFormatError, to_luminance
 
 
+def _native_path(path: Path) -> str:
+    """Path string OpenCV can open.
+
+    On Windows OpenCV may fail with non-ASCII characters (umlauts). In that case
+    the 8.3 short path (pure ASCII) is used if the file system provides one.
+    """
+    text = str(path)
+    if sys.platform != "win32" or text.isascii():
+        return text
+    try:
+        import ctypes
+
+        buf = ctypes.create_unicode_buffer(32768)
+        n = ctypes.windll.kernel32.GetShortPathNameW(text, buf, len(buf))
+        if 0 < n < len(buf) and buf.value.isascii():
+            return buf.value
+    except Exception:  # pragma: no cover - Windows only
+        pass
+    return text
+
+
+def _open_capture(path: Path) -> "cv2.VideoCapture":
+    cap = cv2.VideoCapture(str(path))
+    if not cap.isOpened():
+        alt = _native_path(path)
+        if alt != str(path):
+            cap.release()
+            cap = cv2.VideoCapture(alt)
+    return cap
+
+
 class VideoSource(FrameSource):
     random_access = False
 
     def __init__(self, path: str | os.PathLike):
         self.path = Path(path)
-        cap = cv2.VideoCapture(str(self.path))
+        cap = _open_capture(self.path)
         if not cap.isOpened():
-            raise UnsupportedFormatError(f"Video konnte nicht geöffnet werden: {self.path.name}")
+            hint = "" if str(self.path).isascii() else (
+                " Der Pfad enthält Sonderzeichen/Umlaute – bitte Datei in einen Ordner ohne Umlaute verschieben.")
+            raise UnsupportedFormatError(f"Video konnte nicht geöffnet werden: {self.path.name}.{hint}")
         ok, first = cap.read()
         if not ok or first is None:
             cap.release()
@@ -60,14 +94,14 @@ class VideoSource(FrameSource):
         )
 
     def _fourcc(self) -> str:
-        cap = cv2.VideoCapture(str(self.path))
+        cap = _open_capture(self.path)
         code = int(cap.get(cv2.CAP_PROP_FOURCC) or 0)
         cap.release()
         text = "".join(chr((code >> (8 * i)) & 0xFF) for i in range(4))
         return text if text.isprintable() and text.strip("\x00") else "unbekannt"
 
     def _count_frames(self) -> int:
-        cap = cv2.VideoCapture(str(self.path))
+        cap = _open_capture(self.path)
         n = 0
         while cap.grab():
             n += 1
@@ -84,7 +118,7 @@ class VideoSource(FrameSource):
         wanted = sorted(set(int(i) for i in indices))
         if not wanted:
             return
-        cap = cv2.VideoCapture(str(self.path))
+        cap = _open_capture(self.path)
         try:
             pos = 0
             for target in wanted:

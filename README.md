@@ -105,6 +105,13 @@ frameforge analyze /pfad/zur/session --profile planet --mode standard --csv beri
 frameforge analyze jupiter_*.ser --export-best ./beste_frames
 ```
 
+### Probleme & Protokoll
+
+* *Hilfe › Problem melden …* öffnet ein vorausgefülltes GitHub-Issue (Version, System). Es wird nichts automatisch gesendet – du prüfst den Text vor dem Absenden.
+* Bei unerwarteten Fehlern erscheint ein Dialog mit Details; Ursache und Analyseverlauf stehen im Protokoll (*Hilfe › Protokollordner öffnen*):
+  Windows `%LOCALAPPDATA%\FrameForge\logs`, macOS `~/Library/Logs/FrameForge`.
+* Doppelklick auf eine `.ffproj`-Datei öffnet das Projekt; SER/FITS lassen sich über *Öffnen mit › FrameForge* direkt analysieren.
+
 ---
 
 ## Entwicklung
@@ -145,6 +152,8 @@ tests/             pytest-Suite mit synthetischen Testdaten
 1. Version in `frameforge/__init__.py` erhöhen und `CHANGELOG.md` ergänzen.
 2. Commit, dann Tag pushen: `git tag v0.2.0 && git push origin v0.2.0`
 3. GitHub Actions baut Windows- und macOS-Installer, erzeugt `SHA256SUMS.txt` und veröffentlicht das Release. Tags mit Bindestrich (z. B. `v0.3.0-beta.1`) werden als Vorabversion markiert und nur angeboten, wenn *„Auch Vorabversionen anbieten“* aktiviert ist.
+
+**Hinweise zur Build-Pipeline (kostenfreie Variante):** Für öffentliche Repositories sind die GitHub-Actions-Builds kostenlos. Release-Builds installieren nur fertige Binärpakete; fehlt für eine Plattform (z. B. Intel-Macs) ein Paket, schlägt nur dieser Build schnell fehl, die übrigen Pakete werden trotzdem veröffentlicht. Den Build kann man ohne Veröffentlichung testen: *Actions › Release › Run workflow*.
 
 **Wichtig für Updates:** Die App fragt die GitHub-API ohne Anmeldung ab. Das funktioniert nur, wenn das Repository (bzw. das in `UPDATE_REPOSITORY` eingetragene Release-Repository) **öffentlich** ist. Bei einem privaten Repository kann ein separates öffentliches Repository nur für Releases verwendet werden.
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 import time
 
-from PySide6.QtCore import QRectF, Qt, QTimer
+from PySide6.QtCore import QEvent, QLibraryInfo, QLocale, QObject, QRectF, Qt, QTimer, QTranslator
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QSplashScreen
 
@@ -68,12 +68,50 @@ def _splash_pixmap(ratio: float) -> QPixmap:
     return pm
 
 
+class FileOpenFilter(QObject):
+    """macOS delivers files opened via Finder/Dock as QFileOpenEvent instead of argv."""
+
+    def __init__(self):
+        super().__init__()
+        self.window = None
+        self.pending: list[str] = []
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.FileOpen:
+            path = event.file()
+            if self.window is not None:
+                self.window.open_external([path])
+            else:
+                self.pending.append(path)
+            return True
+        return False
+
+
+def _install_translations(app) -> None:
+    """German texts for Qt's own dialogs (Yes/No, Cancel, file dialogs)."""
+    path = QLibraryInfo.path(QLibraryInfo.TranslationsPath)
+    for name in ("qtbase_de",):
+        tr = QTranslator(app)
+        if tr.load(QLocale(QLocale.German), "qtbase", "_", path) or tr.load(name, path):
+            app.installTranslator(tr)
+
+
 def main(argv=None) -> int:
     argv = list(sys.argv if argv is None else argv)
+    from ..logs import install_excepthooks, log, setup_logging
+
+    setup_logging()
     QApplication.setApplicationName(APP_NAME)
     QApplication.setOrganizationName(ORGANIZATION)
     QApplication.setApplicationVersion(__version__)
     app = QApplication.instance() or QApplication(argv)
+    _install_translations(app)
+    from .crash import CrashReporter
+
+    reporter = CrashReporter()
+    install_excepthooks(reporter.crashed.emit)
+    file_filter = FileOpenFilter()
+    app.installEventFilter(file_filter)
 
     splash = QSplashScreen(_splash_pixmap(app.devicePixelRatio()), Qt.WindowStaysOnTopHint)
     splash.setAttribute(Qt.WA_TranslucentBackground)
@@ -107,16 +145,18 @@ def main(argv=None) -> int:
         window.show()
         splash.finish(window)
         # Files passed on the command line / dropped on the app icon are queued directly
-        paths = [a for a in argv[1:] if not a.startswith("-")]
+        file_filter.window = window
+        paths = [a for a in argv[1:] if not a.startswith("-")] + file_filter.pending
         if paths:
-            from pathlib import Path
-            window.open_paths([Path(p) for p in paths])
+            window.open_external(paths)
         elif window.settings.get("ui/show_welcome"):
             QTimer.singleShot(150, window.show_welcome)
         QTimer.singleShot(2500, window.check_updates_silently)
 
     QTimer.singleShot(int(remaining * 1000), show_main)
-    return app.exec()
+    code = app.exec()
+    log.info("Beendet (Code %s)", code)
+    return code
 
 
 if __name__ == "__main__":

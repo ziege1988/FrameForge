@@ -1,0 +1,38 @@
+name: Fehler melden
+description: Etwas funktioniert nicht wie erwartet
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke für die Meldung! Bitte **keine privaten Daten** hochladen. Aufnahmen nur anhängen,
+        wenn du sie öffentlich teilen möchtest (große Dateien z. B. per Link).
+  - type: input
+    id: version
+    attributes:
+      label: FrameForge-Version und Betriebssystem
+      description: Steht unter „Info“, z. B. „FrameForge 0.2.0 · Windows 11“
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: Was ist passiert und was hast du erwartet?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Schritte zum Nachstellen
+      placeholder: "1. Ordner mit … öffnen\n2. Profil … wählen\n3. …"
+  - type: input
+    id: format
+    attributes:
+      label: Dateiformat
+      description: z. B. SER 16 bit Mono, FITS (Siril), CR3, MP4
+  - type: textarea
+    id: log
+    attributes:
+      label: Auszug aus dem Protokoll
+      description: Hilfe › Protokollordner öffnen › frameforge.log (die letzten Zeilen genügen)
+      render: text

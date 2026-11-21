@@ -92,3 +92,16 @@ def test_missing_platform_asset(tmp_path):
 def test_not_frozen_cannot_self_install():
     ok, why = updater.can_self_install()
     assert not ok and why
+
+
+def test_issue_url_and_log_setup(tmp_path, monkeypatch):
+    from frameforge import logs
+
+    monkeypatch.setattr(logs, "log_dir", lambda: tmp_path / "logs")
+    path = logs.setup_logging()
+    logs.log.info("Testeintrag")
+    for h in logs.log.handlers:
+        h.flush()
+    assert path is not None and "Testeintrag" in path.read_text(encoding="utf-8")
+    url = logs.issue_url("Traceback: Beispiel")
+    assert url.startswith("https://github.com/") and "Traceback" in url
