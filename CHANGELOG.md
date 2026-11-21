@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 – 2026-11-21
+
+- Neues **Rechenprotokoll**: Während der Analyse fährt rechts ein Panel herein, das live zeigt, wie die
+  Berechnung abläuft – Datei öffnen, Objekterkennung, Messwerte jedes Frames, Frame-Qualität,
+  Stacking-Empfehlung und die Score-Formel mit eingesetzten Werten. Mit Syntax-Hervorhebung,
+  automatischem Mitlaufen, Kopieren und Leeren; ein-/ausblendbar über *Analyse › Rechenprotokoll* (Strg+L)
+  oder automatisch bei jeder Analyse (Einstellungen › Allgemein).
+
 ## 0.2.0 – 2026-11-21
 
 Neues Erscheinungsbild und Deep-Sky-Unterstützung.

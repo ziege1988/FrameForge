@@ -119,3 +119,18 @@ def test_project_roundtrip(tmp_path, session_dir):
     assert a.summary == b.summary and a.reasons[0].text == b.reasons[0].text
     assert b.best_frame_indices().size == a.best_frame_indices().size
     assert loaded.elapsed_s == pytest.approx(s.elapsed_s)
+
+
+def test_trace_contains_steps_and_scores(session_dir):
+    from frameforge.core.trace import Tracer
+
+    t = Tracer(maxlen=50)  # small buffer → oldest lines are dropped and counted
+    s = analyze_session([session_dir], AnalysisOptions(trace=t))
+    lines, skipped = t.drain()
+    assert skipped > 0 and len(lines) <= 50
+    assert lines[-1].startswith("# ✓ Analyse")
+    t2 = Tracer()
+    analyze_session([session_dir / "1_good.ser"], AnalysisOptions(trace=t2))
+    text = "\n".join(t2.drain()[0])
+    assert "compute_metrics" in text and "frame[00039]" in text and "score = (" in text
+    assert s.files  # tracing must not change results

@@ -85,3 +85,23 @@ def test_open_external_project_and_crash_reporter(app, tmp_path, settings, windo
     w.open_external([str(proj)])
     assert w.session is not None and w.worker is None
     assert CrashReporter() is not None
+
+
+def test_trace_panel_shows_live_computation(app, tmp_path, settings, window_factory):
+    import time
+
+    planet_video(tmp_path / "a.ser", n=8)
+    w = window_factory(settings)
+    w.show()
+    w.open_paths([tmp_path], replace=True)
+    assert w.trace_panel.is_open()
+    w.worker.wait(60000)
+    end = time.time() + 2
+    while time.time() < end:  # let the slide-in animation and the drain timer run
+        app.processEvents()
+    text = w.trace_panel.text()
+    assert ">>> source = open_source('a.ser')" in text
+    assert "frame[00007]" in text and "score = (" in text
+    assert w.trace_panel.width() > 300
+    w.toggle_trace()
+    assert not w.trace_panel.is_open()

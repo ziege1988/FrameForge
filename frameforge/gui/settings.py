@@ -19,6 +19,7 @@ DEFAULTS = {
     "updates/skipped_version": "",
     "ui/last_dir": "",
     "ui/show_welcome": True,
+    "ui/trace_auto_open": True,
     "ui/geometry": None,
     "ui/state": None,
 }

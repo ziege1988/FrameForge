@@ -96,7 +96,8 @@ Installationspakete stehen unter **Releases** bereit:
    * *Vollständig* – jeder Frame in voller Auflösung
 3. **Übersicht**: Ergebnis-Dashboard mit Empfehlungsquote, Ø-Score, Top-Ergebnissen, Details, Ausschluss-Gründen, Empfehlungen und Vorschau. Doppelklick auf eine Datei öffnet sie in der Analyse.
 4. **Analyse**: vollständige Tabelle (sortierbar) und je Datei **Bewertung**, **Qualitätsverlauf** (mehrere Dateien markieren = Session-Vergleich), **Vorschau** (bester Frame, Zoom, lokale Qualitätskarte) und **Frame-Selektion** (Export als SER/CSV).
-5. **Berichte**: Export als CSV (Excel-kompatibel, `;`-getrennt) oder JSON, Projekt speichern/öffnen, Session-Zusammenfassung.
+5. **Rechenprotokoll** (Strg+L): seitliches Live-Panel, das jeden Rechenschritt mit den echten Werten zeigt – von der Objekterkennung über die Frame-Metriken bis zur Score-Formel.
+6. **Berichte**: Export als CSV (Excel-kompatibel, `;`-getrennt) oder JSON, Projekt speichern/öffnen, Session-Zusammenfassung.
 
 ### Kommandozeile
 

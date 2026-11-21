@@ -19,6 +19,7 @@ from .io import SourceInfo, open_source
 from .io.registry import collect_files
 from .metrics import SCALAR_FIELDS, THUMB_SIZE, FrameMetrics, compute_metrics, detect_object, phase_shift
 from .profiles import Profile, get_profile
+from .trace import fmt
 from .scoring import (
     VERDICT_ERROR,
     Reason,
@@ -46,6 +47,8 @@ class AnalysisOptions:
     mode: str = "standard"
     threads: int = max(1, (os.cpu_count() or 2) - 1)
     recursive: bool = True
+    #: Optional live trace sink (see core/trace.py); not part of the analysis result
+    trace: Callable[[str], None] | None = field(default=None, repr=False, compare=False)
 
     @property
     def max_frames(self) -> int | None:
@@ -194,13 +197,23 @@ def analyze_file(path: str | os.PathLike, options: AnalysisOptions, progress: Ca
     """Analyse one file. Errors are captured in ``FileResult.error``."""
     profile = profile or get_profile(options.profile)
     result = FileResult(path=Path(path), profile=profile.key)
+    tr = options.trace
     t0 = time.perf_counter()
     try:
+        if tr:
+            tr("")
+            tr(f"# ── {Path(path).name} " + "─" * max(4, 52 - len(Path(path).name)))
+            tr(f">>> source = open_source({Path(path).name!r})")
         with open_source(path) as source:
             info = source.info
             result.info = info
             indices = sample_indices(info.frame_count, options.max_frames)
             result.sampled = indices.size < info.frame_count
+            if tr:
+                tr(f"    {info.format} · {info.width}×{info.height} px · {info.bit_depth} bit · {info.color} · "
+                   f"{info.frame_count} Frame(s)" + (f" · {fmt(info.fps, 1)} fps" if info.fps else ""))
+                tr(f">>> indices = sample_indices({info.frame_count}, max_frames={options.max_frames})"
+                   f"   # {indices.size} Frames" + (" (Stichprobe)" if result.sampled else ""))
 
             # Reference detection fixes the analysis scale for the whole file
             ref_idx = int(indices[indices.size // 2])
@@ -209,9 +222,16 @@ def analyze_file(path: str | os.PathLike, options: AnalysisOptions, progress: Ca
             scale = 1.0
             if options.max_size:
                 scale = min(1.0, options.max_size / max(ref_det.roi[2], ref_det.roi[3], 1))
+            if tr:
+                x, y, w, h = ref_det.roi
+                kind = "Oberfläche/Feld" if ref_det.surface else "Objekt"
+                tr(f">>> det = detect_object(frame[{ref_idx}], profile={profile.key!r})")
+                tr(f"    roi=({x},{y},{w}×{h}) · {kind} · Füllgrad={fmt(ref_det.object_fraction, 3)} · scale={fmt(scale, 3)}")
+                tr(f">>> for i in indices: m = {'compute_star_metrics' if profile.key == 'deepsky' else 'compute_metrics'}"
+                   f"(frame[i])   # {options.threads} Threads")
 
             metrics, positions = _process_frames(source, indices, profile, scale, options.threads, progress,
-                                                 cancel, ref.shape)
+                                                 cancel, ref.shape, tr)
             if not metrics:
                 raise RuntimeError("Es konnten keine Frames gelesen werden.")
             result.indices = np.array([m.index for m in metrics], dtype=np.int64)
@@ -220,6 +240,13 @@ def analyze_file(path: str | os.PathLike, options: AnalysisOptions, progress: Ca
             result.local_maps = np.stack([m.local_map for m in metrics])
             result.positions = positions
             result.quality = frame_quality(result.arrays, profile.key)
+            if tr:
+                q = result.quality
+                if profile.key == "deepsky":
+                    tr(">>> q = 100·(0.55·FWHM_best/FWHM + 0.25·Sterne/Sterne_p99 + 0.20·(0.75−ecc)/0.35)")
+                else:
+                    tr(">>> q = 100·(0.85·S/S_p99 + 0.10·K/K_p99 + 0.05·U) · Helligkeits-/Rand-Korrektur")
+                tr(f"    quality: min={fmt(q.min(), 1)} median={fmt(float(np.median(q)), 1)} max={fmt(q.max(), 1)}")
 
             ts = source.timestamps()
             if ts is not None and ts.size == info.frame_count:
@@ -236,12 +263,29 @@ def analyze_file(path: str | os.PathLike, options: AnalysisOptions, progress: Ca
             result.preview_roi = (int(bx * pf), int(by * pf), int(bw * pf), int(bh * pf))
             result.preview_local = metrics[best_pos].local_map
             result.aggregate = _aggregate(result, metrics, info, ref.shape)
+            if tr:
+                a = result.aggregate
+                tr(">>> recommend_selection(quality)")
+                tr(f"    # {a['selection_reason']}")
+                tr(f"    → beste {fmt(a['recommended_fraction'] * 100, 1)} % = {a['recommended_frames']} Frames · "
+                   f"bester Frame #{result.best_index}")
+                if profile.key == "deepsky":
+                    tr(f"    aggregate: fwhm={fmt(a['fwhm'], 3)} px · ecc={fmt(a['eccentricity'], 3)} · "
+                       f"stars={a['star_count']} · bg={fmt(a['background'])} · snr={fmt(a['snr'], 1)}")
+                else:
+                    tr(f"    aggregate: sharp={fmt(a['sharp_combined'])} · contrast={fmt(a['contrast'])} · "
+                       f"snr_stack={fmt(a['snr_stack'], 1)} · peak={fmt(a['peak'], 3)} · jitter={fmt(a['jitter_px'], 2)} px")
     except InterruptedError:
         raise
     except Exception as exc:  # report and continue with the next file
         result.error = f"{type(exc).__name__}: {exc}"
         result.verdict = VERDICT_ERROR
+        if tr:
+            tr(f"!!! Fehler: {result.error}")
     result.elapsed_s = time.perf_counter() - t0
+    if tr and result.error is None:
+        n = result.analyzed_frames
+        tr(f"    ✓ {n} Frame(s) in {fmt(result.elapsed_s, 2)} s ({fmt(n / max(result.elapsed_s, 1e-6), 1)} Frames/s)")
     return result
 
 
@@ -255,7 +299,7 @@ def _parse_start(text) -> float | None:
 
 
 def _process_frames(source, indices, profile, scale, threads, progress, cancel,
-                    frame_shape) -> tuple[list[FrameMetrics], np.ndarray]:
+                    frame_shape, trace=None) -> tuple[list[FrameMetrics], np.ndarray]:
     """Read frames sequentially (I/O) and compute metrics in a thread pool.
 
     At most ``2 × threads`` frames are in flight and only the thumbnail of the
@@ -280,6 +324,8 @@ def _process_frames(source, indices, profile, scale, threads, progress, cancel,
         m.thumb = None
         positions.append(state["pos"])
         out.append(m)
+        if trace:
+            trace(_frame_line(m, profile.key, state["pos"]))
         if progress and len(out) % 5 == 0:
             progress(len(out) / total)
 
@@ -368,13 +414,24 @@ def _aggregate(result: FileResult, metrics: list[FrameMetrics], info: SourceInfo
     }
 
 
+def _frame_line(m: FrameMetrics, profile_key: str, pos) -> str:
+    if profile_key == "deepsky":
+        return (f"    frame[{m.index:05d}] stars={m.star_count:<4d} fwhm={fmt(m.fwhm, 3):<5} ecc={fmt(m.eccentricity, 3):<5} "
+                f"bg={fmt(m.background):<6} σ={fmt(m.noise_sigma)}")
+    return (f"    frame[{m.index:05d}] sharp={fmt(m.sharpness):<6} σ={fmt(m.noise_sigma):<6} "
+            f"snr={fmt(m.snr, 1):<5} peak={fmt(m.peak, 3):<5} Δ=({fmt(pos[0], 1)},{fmt(pos[1], 1)})"
+            + ("  ⚠ Rand" if m.touches_edge else "") + ("  ⚠ kein Signal" if m.low_signal else ""))
+
+
 # ---------------------------------------------------------------------------
 # Session analysis
 # ---------------------------------------------------------------------------
 
-def score_files(files: list[FileResult], profile: Profile) -> list[str]:
+def score_files(files: list[FileResult], profile: Profile, trace=None) -> list[str]:
     """(Re-)score files against each other; returns session recommendations."""
     assessments = assess_session([f.aggregate if f.error is None else None for f in files], profile)
+    if trace:
+        _trace_scoring(trace, files, assessments, profile)
     for f, a in zip(files, assessments):
         if f.error is not None:
             f.score, f.verdict, f.potential = 0.0, VERDICT_ERROR, "–"
@@ -395,6 +452,28 @@ def score_files(files: list[FileResult], profile: Profile) -> list[str]:
     return session_recommendations(files, profile)
 
 
+def _trace_scoring(tr, files, assessments, profile: Profile) -> None:
+    from .scoring import component_label
+
+    ok = sum(1 for f in files if f.error is None)
+    tr("")
+    tr("# ── Session-Bewertung " + "─" * 36)
+    tr(f">>> assess_session({ok} Dateien, profile={profile.key!r})")
+    tr("    # relativ: c = 50 + 50·tanh(ln(Wert/Median)/Skala) · absolut: Belichtung, Stabilität, Form")
+    for f, a in zip(files, assessments):
+        if f.error is not None:
+            continue
+        tr(f"  {f.path.name}")
+        used = [(k, v) for k, v in a.components.items() if v is not None and k in profile.weights]
+        for k, v in a.components.items():
+            label = component_label(k, profile)
+            tr(f"    c[{k:<9}] = {'n. b.' if v is None else fmt(v, 1):>6}   # {label}")
+        if used:
+            terms = " + ".join(f"{profile.weights[k]:.2f}·{v:.1f}" for k, v in used)
+            den = sum(profile.weights[k] for k, _ in used)
+            tr(f"    score = ({terms}) / {den:.2f} = {a.score:.1f}  → {a.verdict}")
+
+
 def analyze_session(paths: Sequence[str | os.PathLike], options: AnalysisOptions,
                     progress: ProgressCallback | None = None, cancel: threading.Event | None = None,
                     on_file: Callable[[FileResult], None] | None = None) -> SessionResult:
@@ -405,6 +484,10 @@ def analyze_session(paths: Sequence[str | os.PathLike], options: AnalysisOptions
                             created=datetime.now(timezone.utc))
     n = len(files)
     t0 = time.perf_counter()
+    tr = options.trace
+    if tr:
+        tr(f"# FrameForge · Profil {profile.name} · Modus {options.mode} · {options.threads} Threads")
+        tr(f">>> files = collect_files({len(paths)} Pfad(e))   # {n} unterstützte Datei(en)")
     for i, path in enumerate(files):
         if cancel is not None and cancel.is_set():
             session.cancelled = True
@@ -423,8 +506,16 @@ def analyze_session(paths: Sequence[str | os.PathLike], options: AnalysisOptions
         results.append(res)
         if on_file:
             on_file(res)
-    session.recommendations = score_files(results, profile)
+    session.recommendations = score_files(results, profile, tr)
     session.elapsed_s = time.perf_counter() - t0
+    if tr:
+        ranked = session.ranked()
+        tr("")
+        tr(f">>> ranking   # {len(results)} Dateien in {fmt(session.elapsed_s, 2)} s")
+        for f in ranked[:10]:
+            if f.error is None:
+                tr(f"    #{f.rank:<2} {f.score:5.1f} {f.verdict:<16} {f.path.name}")
+        tr("# ✓ Analyse " + ("abgebrochen" if session.cancelled else "abgeschlossen"))
     if progress:
         progress("Analyse abgeschlossen" if not session.cancelled else "Analyse abgebrochen", 1.0)
     return session

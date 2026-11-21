@@ -43,6 +43,7 @@ from ..core.io import open_source
 from ..core.io.registry import FORMAT_GROUPS, collect_files
 from ..core.profiles import PROFILES, get_profile
 from ..core.project import PROJECT_EXTENSION, load_project, save_project
+from ..core.trace import Tracer
 from . import icons
 from .components import Card, ZoomPreview, status_icon
 from .crash import open_log_folder, report_problem
@@ -51,6 +52,7 @@ from .pages import InfoPage, ReportsPage
 from .resources import app_icon
 from .settings import Settings
 from .settings_page import SettingsPage
+from .trace_panel import TracePanel
 from .theme import BAD, GOOD, MUTED, de_number, score_color, verdict_color
 from .welcome import PROFILE_ORDER, WelcomeDialog
 from .widgets import ComponentBars, QualityPlot
@@ -129,6 +131,10 @@ class MainWindow(QMainWindow):
                                      self.start_analysis)
         self.act_cancel = a.addAction(icons.icon("stop"), "Abbrechen", self.cancel_analysis)
         self.act_clear = a.addAction("Liste leeren", self.clear_queue)
+        a.addSeparator()
+        self.act_trace = a.addAction(icons.icon("analysis"), "Rechenprotokoll anzeigen", QKeySequence("Ctrl+L"),
+                                     self.toggle_trace)
+        self.act_trace.setCheckable(True)
         a.addSeparator()
         pm = a.addMenu("Objekt")
         self.profile_actions = QActionGroup(self)
@@ -224,6 +230,9 @@ class MainWindow(QMainWindow):
         self.info_page.checkUpdates.connect(self.check_updates_now)
         self.pages.addWidget(self.info_page)
         rl.addWidget(self.pages, 1)
+        self.trace_panel = TracePanel()
+        self.trace_panel.closed.connect(lambda: self.act_trace.setChecked(False))
+        rl.addWidget(self.trace_panel)
         self.setCentralWidget(root)
         self.goto(PAGE_OVERVIEW)
 
@@ -262,6 +271,10 @@ class MainWindow(QMainWindow):
         self.mode_box.currentIndexChanged.connect(lambda: self._set_mode(self.mode_box.currentData()))
         bar.addWidget(self.mode_box)
         bar.addStretch(1)
+        self.trace_btn = QPushButton(icons.icon("analysis"), "Rechenprotokoll")
+        self.trace_btn.setToolTip("Live anzeigen, wie die Analyse rechnet (Strg+L)")
+        self.trace_btn.clicked.connect(self.toggle_trace)
+        bar.addWidget(self.trace_btn)
         self.start_btn = QPushButton(icons.icon("play", "#ffffff"), "Analyse starten")
         self.start_btn.setObjectName("primary")
         self.start_btn.clicked.connect(self.start_analysis)
@@ -474,6 +487,11 @@ class MainWindow(QMainWindow):
         if dlg.choice in action:
             action[dlg.choice]()
 
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "trace_panel"):
+            self.trace_panel.sync_width()
+
     def closeEvent(self, event):
         if self.worker and self.worker.isRunning():
             self.worker.cancel()
@@ -577,9 +595,13 @@ class MainWindow(QMainWindow):
         self._update_actions()
 
     # ============================================================== analysis
-    def _options(self) -> AnalysisOptions:
+    def _options(self, trace=None) -> AnalysisOptions:
         return AnalysisOptions(profile=self.settings.get("analysis/profile"), mode=self.settings.get("analysis/mode"),
-                               threads=self.settings.get("analysis/threads"), recursive=False)
+                               threads=self.settings.get("analysis/threads"), recursive=False, trace=trace)
+
+    def toggle_trace(self):
+        self.trace_panel.toggle()
+        self.act_trace.setChecked(self.trace_panel.is_open())
 
     def start_analysis(self):
         if not self.queue or (self.worker and self.worker.isRunning()):
@@ -587,7 +609,12 @@ class MainWindow(QMainWindow):
         self.results.clear()
         self.session = None
         self._refresh_table()
-        self.worker = AnalysisWorker(self.queue, self._options(), self)
+        tracer = Tracer()
+        self.trace_panel.attach(tracer)
+        if self.settings.get("ui/trace_auto_open"):
+            self.trace_panel.show_panel()
+            self.act_trace.setChecked(True)
+        self.worker = AnalysisWorker(self.queue, self._options(tracer), self)
         self.worker.progress.connect(self._on_progress)
         self.worker.fileDone.connect(self._on_file_done)
         self.worker.finishedSession.connect(self._on_session_done)
@@ -622,6 +649,7 @@ class MainWindow(QMainWindow):
 
     def _on_session_done(self, session: SessionResult):
         self.progress.hide()
+        self.trace_panel.finish()
         for f in session.files:
             if f.error:
                 log.warning("Datei nicht auswertbar: %s – %s", f.path, f.error)
@@ -659,6 +687,7 @@ class MainWindow(QMainWindow):
 
     def _on_failed(self, msg):
         self.progress.hide()
+        self.trace_panel.finish()
         log.error("Analyse fehlgeschlagen:\n%s", msg)
         QMessageBox.critical(self, "Fehler", f"Die Analyse ist fehlgeschlagen:\n\n{msg[-1500:]}")
 

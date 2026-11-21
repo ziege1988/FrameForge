@@ -115,6 +115,10 @@ class SettingsPage(QWidget):
         self.show_welcome.setChecked(self.settings.get("ui/show_welcome"))
         self.show_welcome.toggled.connect(lambda v: self._store("ui/show_welcome", v))
         card.body.addWidget(self.show_welcome)
+        self.trace_auto = QCheckBox("Rechenprotokoll bei jeder Analyse seitlich einblenden")
+        self.trace_auto.setChecked(self.settings.get("ui/trace_auto_open"))
+        self.trace_auto.toggled.connect(lambda v: self._store("ui/trace_auto_open", v))
+        card.body.addWidget(self.trace_auto)
         note = QLabel("Alle Analysen laufen lokal auf diesem Computer. Es werden keine Bilddaten hochgeladen; "
                       "eine Internetverbindung wird nur für die Update-Prüfung verwendet.")
         note.setWordWrap(True)
