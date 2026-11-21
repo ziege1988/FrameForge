@@ -42,21 +42,29 @@ def streaks(front: bool, rnd: random.Random) -> str:
 
 def halo_rings() -> str:
     """Lensed image of the far side of the disk: rings around the shadow."""
-    rings = [f'<circle cx="{CX}" cy="{CY}" r="158" fill="url(#haloGlow)"/>',
+    # Wide glow shifted upwards (strong above the hole, weaker below) + narrow glow at the limb
+    rings = [f'<ellipse cx="{CX}" cy="{CY - 26}" rx="160" ry="146" fill="url(#haloOuter)"/>',
+             f'<ellipse cx="{CX}" cy="{CY - 8}" rx="150" ry="142" fill="url(#haloGlow)"/>',
              f'<circle cx="{CX}" cy="{CY}" r="150" fill="url(#haloTint)"/>']
     # fine circular streaks for texture
     rnd = random.Random(7)
-    for _ in range(60):
+    for i in range(60):
         r = rnd.uniform(74, 150)
-        start = rnd.uniform(0, 360)
-        span = rnd.uniform(25, 140)
+        if i % 5 == 0:  # a few short, faint arcs below the hole (lower lensed image)
+            r = rnd.uniform(74, 112)
+            start, span = rnd.uniform(30, 110), rnd.uniform(20, 50)
+        else:  # most arcs stay in the upper half (angles 180°…360° in screen coordinates)
+            start = rnd.uniform(170, 330)
+            span = min(rnd.uniform(25, 140), 370 - start)
         a0, a1 = math.radians(start), math.radians(start + span)
+        mid = math.radians(start + span / 2)
+        below_factor = 0.22 if math.sin(mid) > 0.2 else 1.0  # arcs below the hole are fainter
         x0, y0 = CX + r * math.cos(a0), CY + r * math.sin(a0)
         x1, y1 = CX + r * math.cos(a1), CY + r * math.sin(a1)
         rings.append(f'<path d="M{x0:.1f} {y0:.1f} A{r:.1f} {r:.1f} 0 0 1 {x1:.1f} {y1:.1f}" fill="none" '
                      f'stroke="{rnd.choice(["#ffffff", "#cfe6ff", "#b9b4f0"])}" '
                      f'stroke-width="{rnd.uniform(0.6, 2.2):.1f}" '
-                     f'stroke-opacity="{rnd.uniform(0.12, 0.4) * (1.25 - (r - 74) / 150):.2f}"/>')
+                     f'stroke-opacity="{rnd.uniform(0.12, 0.4) * (1.25 - (r - 74) / 150) * below_factor:.2f}"/>')
     return "\n  ".join(rings)
 
 
@@ -72,17 +80,23 @@ def build() -> str:
       <stop offset="1" stop-color="#1c2a66" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="haloGlow" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0.40" stop-color="#ffffff"/>
-      <stop offset="0.47" stop-color="#e4f2ff"/>
-      <stop offset="0.58" stop-color="#9cc3ff" stop-opacity="0.8"/>
-      <stop offset="0.74" stop-color="#6f86de" stop-opacity="0.42"/>
-      <stop offset="0.90" stop-color="#5a4fa8" stop-opacity="0.14"/>
+      <stop offset="0.42" stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="0.48" stop-color="#d6eaff" stop-opacity="0.7"/>
+      <stop offset="0.57" stop-color="#8fb3f5" stop-opacity="0.3"/>
+      <stop offset="0.70" stop-color="#6a78d0" stop-opacity="0.08"/>
+      <stop offset="0.82" stop-color="#5a4fa8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="haloOuter" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0.35" stop-color="#eaf4ff" stop-opacity="0.85"/>
+      <stop offset="0.52" stop-color="#9cc3ff" stop-opacity="0.55"/>
+      <stop offset="0.72" stop-color="#6f86de" stop-opacity="0.25"/>
+      <stop offset="0.90" stop-color="#5a4fa8" stop-opacity="0.07"/>
       <stop offset="1" stop-color="#3a3580" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="haloTint" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0.5" stop-color="#d9a3e0" stop-opacity="0"/>
-      <stop offset="0.8" stop-color="#d9a3e0" stop-opacity="0.32"/>
-      <stop offset="1" stop-color="#b07ad0" stop-opacity="0.1"/>
+      <stop offset="0.72" stop-color="#d9a3e0" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#b07ad0" stop-opacity="0"/>
     </linearGradient>
     <linearGradient id="doppler" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
