@@ -162,9 +162,20 @@ tests/             pytest-Suite mit synthetischen Testdaten
 
 Unter *Einstellungen › Erscheinungsbild* lässt sich der Hintergrund wählen: ein erzeugter Sternenhimmel, mitgelieferte Astrofotos oder ein eigenes Bild. Die Oberflächenfarben werden automatisch aus dem dominanten Farbton der farbigen Bildbereiche abgeleitet (sättigungsgewichtetes Farbton-Histogramm), damit Menüs und Knöpfe zum Nebel passen.
 
-**Bildrechte:** Die mitgelieferten Hintergrundfotos (`frameforge/resources/backgrounds/`) sind Aufnahmen des Repository-Inhabers. Sie dürfen nur zusammen mit FrameForge verwendet werden und fallen nicht unter eine spätere Code-Lizenz.
+**Bildrechte:** Die mitgelieferten Hintergrundfotos (`frameforge/resources/backgrounds/`) sind Aufnahmen des Repository-Inhabers. Sie dürfen nur zusammen mit FrameForge verwendet werden und fallen nicht unter die GPL des Codes.
 
 ---
+
+## Lizenz
+
+FrameForge ist freie Software unter der **GNU General Public License v3.0 oder neuer** (GPL-3.0-or-later), siehe [LICENSE](LICENSE).
+Copyright © 2026 ziege1988.
+
+* Nutzung, Weitergabe und Veränderung sind kostenlos erlaubt.
+* Wer FrameForge (oder darauf aufbauende Programme) weitergibt, muss den Quellcode ebenfalls unter der GPL bereitstellen.
+* Keine Gewährleistung (siehe Abschnitte 15–16 der Lizenz).
+
+**Ausgenommen** sind die Hintergrundfotos in `frameforge/resources/backgrounds/` (eigene Aufnahmen des Repository-Inhabers, alle Rechte vorbehalten; Nutzung nur zusammen mit FrameForge).
 
 ## Lizenzhinweise der verwendeten Bibliotheken
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unveröffentlicht
+
+- FrameForge steht jetzt unter der **GNU GPL v3.0 oder neuer** (Lizenztext in `LICENSE`, im Installer,
+  in der DMG und unter *Info › Lizenztext anzeigen*). Hintergrundfotos sind davon ausgenommen.
+
 ## 0.3.0 – 2026-11-21
 
 - **Neues Logo**: ein Schwarzes Loch mit Akkretionsscheibe, gelinstem Lichtkranz und Photonenring

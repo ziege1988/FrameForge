@@ -21,6 +21,7 @@ PrivilegesRequired=lowest
 OutputDir=..\..\dist
 OutputBaseFilename=FrameForge-{#AppVersion}-windows-x64-setup
 SetupIconFile=..\icons\frameforge.ico
+LicenseFile=..\..\LICENSE
 UninstallDisplayIcon={app}\{#AppExe}
 Compression=lzma2/max
 SolidCompression=yes

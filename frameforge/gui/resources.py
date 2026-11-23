@@ -17,6 +17,11 @@ def resource_dir() -> Path:
     return Path(__file__).resolve().parent.parent / "resources"
 
 
+def license_path() -> Path:
+    base = getattr(sys, "_MEIPASS", None)
+    return Path(base) / "LICENSE" if base else Path(__file__).resolve().parents[2] / "LICENSE"
+
+
 def logo_path() -> Path:
     return resource_dir() / "logo.svg"
 

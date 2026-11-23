@@ -7,6 +7,7 @@ APP="dist/FrameForge.app"
 OUT="dist/FrameForge-${VERSION}-macos-${ARCH}.dmg"
 STAGE=$(mktemp -d)
 cp -R "$APP" "$STAGE/"
+cp LICENSE "$STAGE/LICENSE.txt"
 ln -s /Applications "$STAGE/Applications"
 # Ad-hoc signature (free). Without a paid Apple Developer ID the app is not notarized.
 codesign --force --deep --sign - "$STAGE/FrameForge.app"

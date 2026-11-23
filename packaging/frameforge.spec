@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT))
 from frameforge import APP_NAME, __version__  # noqa: E402
 
 ICONS = ROOT / "packaging" / "icons"
-datas = [(str(ROOT / "frameforge" / "resources"), "frameforge/resources")]
+datas = [(str(ROOT / "frameforge" / "resources"), "frameforge/resources"), (str(ROOT / "LICENSE"), ".")]
 datas += collect_data_files("certifi")
 binaries = collect_dynamic_libs("rawpy")
 # imagecodecs ships ~60 codecs; TIFF files from astro/photo software only need a few

@@ -6,8 +6,10 @@ import html
 import platform
 import sys
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtGui import QDesktopServices, QFontDatabase
 from PySide6.QtWidgets import (
+    QDialog,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -18,13 +20,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import APP_NAME, APP_SUBTITLE, __version__
+from .. import APP_NAME, APP_SUBTITLE, UPDATE_REPOSITORY, __version__
 from ..core.analyzer import MODE_LABELS
 from ..core.profiles import PROFILES
 from . import icons
 from .components import Card, format_duration
 from .dashboard import ThemedLabel, slogan_label, wordmark
-from .resources import logo_pixmap
+from .resources import license_path, logo_pixmap
 from .theme import GOOD, MUTED, score_color, verdict_color
 
 
@@ -252,6 +254,26 @@ class InfoPage(QWidget):
         grid.setColumnStretch(1, 2)
         lay.addLayout(grid)
 
+        own = Card("Lizenz")
+        t = QLabel(f"{APP_NAME} ist freie Software unter der <b>GNU General Public License, Version 3 oder neuer</b> "
+                   "(GPL-3.0-or-later). Du darfst das Programm kostenlos nutzen, weitergeben und verändern – "
+                   "veränderte Versionen müssen ebenfalls unter der GPL mit Quellcode weitergegeben werden. "
+                   "Es gibt keine Gewährleistung.<br>"
+                   "Die mitgelieferten Hintergrundfotos sind davon ausgenommen: © Inhaber des Repositorys, "
+                   f"Nutzung nur zusammen mit {APP_NAME}.")
+        t.setWordWrap(True)
+        own.body.addWidget(t)
+        row = QHBoxLayout()
+        show = QPushButton("Lizenztext anzeigen")
+        show.clicked.connect(self._show_license)
+        src = QPushButton("Quellcode auf GitHub")
+        src.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(f"https://github.com/{UPDATE_REPOSITORY}")))
+        row.addWidget(show)
+        row.addWidget(src)
+        row.addStretch(1)
+        own.body.addLayout(row)
+        lay.addWidget(own)
+
         lic = Card("Verwendete Open-Source-Bibliotheken")
         t = QLabel("NumPy (BSD) · OpenCV (Apache 2.0) · Qt/PySide6 (LGPLv3) · tifffile & imagecodecs (BSD) · "
                    "rawpy (MIT) mit LibRaw (LGPL 2.1/CDDL) · certifi (MPL 2.0). Vielen Dank an alle Entwicklerinnen "
@@ -264,3 +286,20 @@ class InfoPage(QWidget):
         foot.setAlignment(Qt.AlignRight)
         lay.addWidget(foot)
         lay.addStretch(1)
+
+    def _show_license(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Lizenz – GNU GPL v3")
+        dlg.resize(720, 640)
+        v = QVBoxLayout(dlg)
+        view = QTextBrowser()
+        view.setFont(QFontDatabase.systemFont(QFontDatabase.FixedFont))
+        try:
+            view.setPlainText(license_path().read_text(encoding="utf-8"))
+        except OSError:
+            view.setPlainText("Lizenztext nicht gefunden: https://www.gnu.org/licenses/gpl-3.0.txt")
+        v.addWidget(view)
+        close = QPushButton("Schließen")
+        close.clicked.connect(dlg.accept)
+        v.addWidget(close, 0, Qt.AlignRight)
+        dlg.exec()

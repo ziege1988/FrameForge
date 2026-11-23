@@ -144,3 +144,10 @@ def test_custom_background_image(app, settings, window_factory, tmp_path):
     w = window_factory(settings)
     assert w.sky._mode == "image"
     assert 90 <= theme.current().hue <= 150
+
+
+def test_license_is_bundled_and_shown(app):
+    from frameforge.gui.resources import license_path
+
+    text = license_path().read_text(encoding="utf-8")
+    assert "GNU GENERAL PUBLIC LICENSE" in text and "Version 3, 29 June 2007" in text
